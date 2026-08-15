@@ -11,6 +11,7 @@
     "ants": "dist/cli/index.cjs"
   },
   "files": [
+    ".agents/skills",
     "dist/cli",
     "dist/main",
     "dist/renderer"

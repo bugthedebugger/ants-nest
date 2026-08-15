@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ants Nest CLI"
+  short_description: "Publish and manage local services safely"
+  default_prompt: "Use $ants-nest-cli to create a temporary share link for my local service."
