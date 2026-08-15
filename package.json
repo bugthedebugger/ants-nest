@@ -1,0 +1,88 @@
+{
+  "name": "ants-nest",
+  "desktopName": "ants-nest.desktop",
+  "version": "0.1.0",
+  "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
+  "author": "Ants Nest contributors",
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "bin": {
+    "ants-nest": "dist/cli/index.cjs",
+    "ants": "dist/cli/index.cjs"
+  },
+  "files": [
+    "dist/cli",
+    "dist/main",
+    "dist/renderer"
+  ],
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:main\"",
+    "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
+    "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap",
+    "package": "npm run build && electron-builder",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root .",
+    "check": "npm run typecheck && npm test && npm run build",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@types/qrcode": "^1.5.6",
+    "commander": "^14.0.0",
+    "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.0",
+    "electron": "^41.5.0",
+    "electron-builder": "^26.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.0"
+  },
+  "build": {
+    "appId": "tools.antsnest.app",
+    "productName": "Ants Nest",
+    "directories": {
+      "output": "release"
+    },
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development",
+      "icon": "assets/icon.png",
+      "syncDesktopName": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
