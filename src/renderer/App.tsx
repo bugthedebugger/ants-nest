@@ -38,6 +38,7 @@ export function App() {
   const [doctor, setDoctor] = useState<DoctorResult>();
   const [remote, setRemote] = useState<RemoteAccessState>({ enabled: false, devices: [] });
   const [cliInstallation, setCliInstallation] = useState<CliInstallationStatus>();
+  const [appVersion, setAppVersion] = useState("");
   const [qrCode, setQrCode] = useState<string>();
   const [page, setPage] = useState<Page>("tunnels");
   const [modal, setModal] = useState<Modal>(null);
@@ -52,6 +53,7 @@ export function App() {
   }, []);
   useEffect(() => {
     void refresh().catch((e) => setError(message(e)));
+    void window.antsNest.appVersion().then(setAppVersion).catch(() => undefined);
     return window.antsNest.onStateChanged(() => void refresh().catch(() => undefined));
   }, [refresh]);
 
@@ -98,8 +100,8 @@ export function App() {
           <button className={page === "settings" ? "active" : ""} onClick={() => setPage("settings")}><Settings2 size={17} /><span className="nav-label">Settings</span></button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="cli-card"><div><strong>Agent CLI</strong><span>Ready for local agents</span></div><Terminal size={16} /></div>
           <button className="connection" onClick={() => setPage("settings")}><i className={doctor?.installed && doctor?.authenticated ? "ok" : ""} /><span>{doctor?.installed && doctor?.authenticated ? "Cloudflare connected" : "Setup required"}</span></button>
+          <span className="app-version">Ants Nest v{appVersion || "—"}</span>
         </div>
       </aside>
 
