@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDesktopNamed, createDesktopQuick, createNamed, createQuick, expireTunnel, listTunnels, stopTunnel } from "./manager";
+import { isRunning } from "./cloudflared";
 
 let directory = "";
 let dnsCreated = false;
@@ -23,7 +24,7 @@ setInterval(() => {}, 1000);
   process.env.ANTS_NEST_HOME = path.join(directory, "data");
   process.env.CLOUDFLARED_BIN = binary;
   const expiryWorker = path.join(directory, "fake-expiry-worker");
-  await fs.writeFile(expiryWorker, "#!/usr/bin/env node\nprocess.exit(0);\n", { mode: 0o700 });
+  await fs.writeFile(expiryWorker, "#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n", { mode: 0o700 });
   process.env.ANTS_NEST_EXPIRY_WORKER = expiryWorker;
   await fs.mkdir(process.env.ANTS_NEST_HOME, { recursive: true });
   await fs.writeFile(path.join(process.env.ANTS_NEST_HOME, "cloudflare.json"), JSON.stringify({
@@ -57,10 +58,12 @@ describe("tunnel manager", () => {
     expect(started.publicUrl).toBe("https://agent-preview-quick.tunnels.example.com");
     expect(started.origin).toBe("http://localhost:4173");
     expect(started.description).toBe("Preview the agent workspace");
+    expect(isRunning(started.expiryPid)).toBe(true);
     expect((await listTunnels())[0]?.status).toBe("online");
 
     const stopped = await stopTunnel(started.id);
     expect(stopped.status).toBe("stopped");
+    expect(isRunning(started.expiryPid)).toBe(false);
     expect(await listTunnels()).toEqual([]);
   }, 10_000);
 

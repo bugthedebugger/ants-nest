@@ -1,6 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { configureCloudflare, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { configureCloudflare, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
 import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState } from "../shared/types";
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
@@ -145,6 +145,7 @@ app.whenReady().then(async () => {
   stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();
   createWindow();
+  void reconcileExpiryWorkers().catch((error) => console.error("Could not reconcile expiration workers:", error));
   void restoreRemoteAccess().catch((error) => console.error("Could not restore remote access:", error));
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

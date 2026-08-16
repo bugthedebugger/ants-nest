@@ -47,6 +47,7 @@ async function openDatabase() {
     CREATE TABLE IF NOT EXISTS tunnel_sessions (
       profile_id TEXT PRIMARY KEY REFERENCES tunnel_profiles(id) ON DELETE CASCADE,
       pid INTEGER,
+      expiry_pid INTEGER,
       status TEXT NOT NULL CHECK (status IN ('starting', 'online', 'stopped', 'failed')),
       public_url TEXT,
       started_at TEXT,
@@ -76,6 +77,8 @@ async function openDatabase() {
   `);
   const profileColumns = database.prepare("PRAGMA table_info(tunnel_profiles)").all() as Array<{ name: string }>;
   if (!profileColumns.some((column) => column.name === "dns_record_id")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN dns_record_id TEXT");
+  const sessionColumns = database.prepare("PRAGMA table_info(tunnel_sessions)").all() as Array<{ name: string }>;
+  if (!sessionColumns.some((column) => column.name === "expiry_pid")) database.exec("ALTER TABLE tunnel_sessions ADD COLUMN expiry_pid INTEGER");
   await fs.chmod(paths.database(), 0o600);
   return database;
 }
@@ -114,6 +117,7 @@ function stateFromDatabase(database: Database): State {
       profileId: String(row.profile_id),
       status: String(row.status),
       ...(optionalNumber(row, "pid") ? { pid: optionalNumber(row, "pid") } : {}),
+      ...(optionalNumber(row, "expiry_pid") ? { expiryPid: optionalNumber(row, "expiry_pid") } : {}),
       ...(optionalString(row, "public_url") ? { publicUrl: optionalString(row, "public_url") } : {}),
       ...(optionalString(row, "started_at") ? { startedAt: optionalString(row, "started_at") } : {}),
       ...(optionalString(row, "stopped_at") ? { stoppedAt: optionalString(row, "stopped_at") } : {}),
@@ -135,7 +139,7 @@ function insertProfiles(statement: Statement, profiles: TunnelProfile[]) {
 
 function insertSessions(statement: Statement, sessions: TunnelSession[]) {
   for (const session of sessions) statement.run(
-    session.profileId, session.pid ?? null, session.status, session.publicUrl ?? null,
+    session.profileId, session.pid ?? null, session.expiryPid ?? null, session.status, session.publicUrl ?? null,
     session.startedAt ?? null, session.stoppedAt ?? null, session.expiresAt ?? null,
     session.error ?? null, session.logPath ?? null,
   );
@@ -149,8 +153,8 @@ function replaceState(database: Database, input: State) {
     expires_in_seconds, fixed_expires_at, created_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.profiles);
   insertSessions(database.prepare(`INSERT INTO tunnel_sessions (
-    profile_id, pid, status, public_url, started_at, stopped_at, expires_at, error, log_path
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.sessions);
+    profile_id, pid, expiry_pid, status, public_url, started_at, stopped_at, expires_at, error, log_path
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.sessions);
 }
 
 export async function readState(): Promise<State> {

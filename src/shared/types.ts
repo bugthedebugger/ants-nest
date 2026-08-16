@@ -22,6 +22,7 @@ export const tunnelProfileSchema = z.object({
 export const tunnelSessionSchema = z.object({
   profileId: z.string(),
   pid: z.number().int().positive().optional(),
+  expiryPid: z.number().int().positive().optional(),
   status: tunnelStatusSchema,
   publicUrl: z.string().optional(),
   startedAt: z.string().optional(),

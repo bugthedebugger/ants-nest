@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -49,6 +50,34 @@ async function expireOverdueTunnels() {
   }
 }
 
+type ExpiryWorker = { pid: number; profileId: string; expiresAt: string };
+
+function runningExpiryWorkers(): ExpiryWorker[] {
+  if (process.platform !== "linux") return [];
+  const workers: ExpiryWorker[] = [];
+  for (const entry of fsSync.readdirSync("/proc", { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+      const pid = Number(entry.name);
+      if (pid === process.pid) continue;
+    try {
+      const args = fsSync.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean);
+      const configuredWorker = process.env.ANTS_NEST_EXPIRY_WORKER;
+      const workerIndex = args.findIndex((argument) => argument === configuredWorker || argument.endsWith("/dist/core/expiry-worker.cjs"));
+      if (workerIndex < 0 || !args[workerIndex + 1] || !args[workerIndex + 2]) continue;
+      const profileId = args[workerIndex + 1]!;
+      const expiresAt = args[workerIndex + 2]!;
+      if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(profileId) || !Number.isFinite(new Date(expiresAt).getTime())) continue;
+      workers.push({ pid, profileId, expiresAt });
+    } catch { /* process exited while /proc was being inspected */ }
+  }
+  return workers;
+}
+
+async function stopExpiryWorkers(profileId: string, expiresAt?: string) {
+  const workers = runningExpiryWorkers().filter((worker) => worker.profileId === profileId && (!expiresAt || worker.expiresAt === expiresAt));
+  await Promise.all(workers.map((worker) => stopProcess(worker.pid)));
+}
+
 function spawnExpiryWorker(profileId: string, expiresAt: string) {
   const workerPath = process.env.ANTS_NEST_EXPIRY_WORKER || path.join(__dirname, "..", "core", "expiry-worker.cjs");
   const child = spawn(process.execPath, [workerPath, profileId, expiresAt], {
@@ -59,6 +88,26 @@ function spawnExpiryWorker(profileId: string, expiresAt: string) {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
   });
   child.unref();
+  if (!child.pid) throw new Error("Could not start tunnel expiration worker");
+  return child.pid;
+}
+
+export async function reconcileExpiryWorkers() {
+  await expireOverdueTunnels();
+  const state = await readState();
+  const active = state.sessions.filter((session) => session.status === "online" && session.expiresAt);
+  for (const worker of runningExpiryWorkers()) {
+    // Every worker is replaced from the current executable. This both removes
+    // orphaned jobs and releases mounts belonging to older AppImage versions.
+    await stopProcess(worker.pid);
+  }
+  for (const session of active) {
+    const expiryPid = spawnExpiryWorker(session.profileId, session.expiresAt!);
+    await updateState((current) => {
+      const target = current.sessions.find((item) => item.profileId === session.profileId && item.expiresAt === session.expiresAt);
+      if (target) target.expiryPid = expiryPid;
+    });
+  }
 }
 
 export async function listTunnels(): Promise<TunnelView[]> {
@@ -163,7 +212,15 @@ export async function startTunnel(idOrName: string): Promise<TunnelView> {
       target.status = "online";
       return { ...target };
     });
-    if (online.expiresAt) spawnExpiryWorker(profile.id, online.expiresAt);
+    if (online.expiresAt) {
+      await stopExpiryWorkers(profile.id);
+      const expiryPid = spawnExpiryWorker(profile.id, online.expiresAt);
+      await updateState((current) => {
+        const target = current.sessions.find((item) => item.profileId === profile.id);
+        if (target) target.expiryPid = expiryPid;
+      });
+      online.expiryPid = expiryPid;
+    }
     return view(profile, online);
   } catch (error) {
     await stopProcess(processInfo.pid);
@@ -182,6 +239,7 @@ export async function stopTunnel(idOrName: string): Promise<TunnelView> {
   const state = await readState();
   const { profile, session } = locate(state, idOrName);
   await stopProcess(session?.pid);
+  await stopExpiryWorkers(profile.id);
   if (profile.tunnelId || profile.hostname) {
     if (!profile.tunnelId || !profile.hostname) throw new Error("Named tunnel metadata is incomplete; refusing unsafe Cloudflare cleanup.");
     try {
@@ -217,11 +275,13 @@ export async function pauseTunnel(idOrName: string): Promise<TunnelView> {
   const state = await readState();
   const { profile, session } = locate(state, idOrName);
   await stopProcess(session?.pid);
+  await stopExpiryWorkers(profile.id);
   const stopped = await updateState((current) => {
     const target = current.sessions.find((item) => item.profileId === profile.id) || { profileId: profile.id, status: "stopped" as const };
     target.status = "stopped";
     target.stoppedAt = new Date().toISOString();
     delete target.pid;
+    delete target.expiryPid;
     delete target.expiresAt;
     delete target.error;
     if (!current.sessions.includes(target)) current.sessions.push(target);
@@ -256,10 +316,12 @@ export async function expireTunnel(idOrName: string, expectedExpiresAt: string):
     session.status = "stopped";
     session.stoppedAt = new Date().toISOString();
     delete session.pid;
+    delete session.expiryPid;
     delete session.expiresAt;
     return true;
   });
   if (claimed) {
+    await stopExpiryWorkers(profile!.id, expectedExpiresAt);
     await stopProcess(pid);
     if (profile?.tunnelId || profile?.hostname) {
       if (!profile.tunnelId || !profile.hostname) throw new Error("Named tunnel metadata is incomplete; refusing unsafe Cloudflare cleanup.");
@@ -287,6 +349,7 @@ export async function removeTunnel(idOrName: string): Promise<void> {
   const state = await readState();
   const { profile, session } = locate(state, idOrName);
   await stopProcess(session?.pid);
+  await stopExpiryWorkers(profile.id);
   if (profile.tunnelId || profile.hostname) {
     if (!profile.tunnelId || !profile.hostname) throw new Error("Named tunnel metadata is incomplete; refusing unsafe Cloudflare cleanup.");
     await deleteManagedTunnel({ tunnelId: profile.tunnelId, hostname: profile.hostname, dnsRecordId: profile.dnsRecordId });
