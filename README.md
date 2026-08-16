@@ -1,16 +1,16 @@
 # Ants Nest
 
-Ants Nest is a local-first Electron app and CLI for publishing local services through Cloudflare Tunnel. It gives humans a desktop and phone dashboard while giving coding agents a predictable, JSON-friendly command line.
+Ants Nest is a local-first Electron app and CLI for publishing local services through Cloudflare Tunnel. It gives humans a desktop app and a paired Remote access dashboard while giving coding agents a predictable, JSON-friendly command line.
 
 There is no Ants Nest account or hosted backend. The desktop app, CLI, Cloudflare credentials, tunnel state, and authorized-device state all live on your machine.
 
 ## Highlights
 
 - Create expiring quick shares and longer-lived named tunnels.
-- Use any available first-level hostname from the Electron or authorized Remote access UI.
+- Use any available first-level hostname from the Electron app or an authorized Remote access dashboard.
 - Give agents collision-safe CLI namespaces: `<name>-quick.<domain>` and `<name>-share.<domain>`.
-- Control tunnels from a phone through `antsnest.<domain>` with single-use QR pairing.
-- Revoke individual phone browsers or every authorized device immediately.
+- Control tunnels from any paired device through the Remote access dashboard at `antsnest.<domain>`.
+- Give every paired browser its own token and revoke individual devices or all authorized devices immediately.
 - Configure Cloudflare once from either the desktop app or CLI.
 - Install just the CLI or the complete AppImage + CLI with one command.
 - Share one WAL-enabled SQLite state store between Electron and the CLI, with real-time desktop refresh.
@@ -23,9 +23,9 @@ Assuming `CLOUDFLARE_PROXY_DOMAIN=example.com`:
 
 | Surface | Quick share | Named tunnel |
 | --- | --- | --- |
-| Electron / phone | User chooses an unused direct subdomain, such as `review.example.com` | User chooses an unused direct subdomain, such as `docs.example.com` |
+| Electron / Remote access dashboard | User chooses an unused direct subdomain, such as `review.example.com` | User chooses an unused direct subdomain, such as `docs.example.com` |
 | CLI / agents | `<slug>-quick.example.com` | `<slug>-share.example.com` |
-| Phone dashboard | `antsnest.example.com` | — |
+| Remote access dashboard host | `antsnest.example.com` | — |
 
 These are first-level subdomains, so a normal full Cloudflare zone can serve them with Universal SSL. Ants Nest checks the exact hostname before provisioning and refuses to continue if any DNS record already occupies it. There is no replace or override option.
 
@@ -179,7 +179,7 @@ See [.agents/skills/ants-nest-cli/SKILL.md](.agents/skills/ants-nest-cli/SKILL.m
 
 ## Remote access
 
-Select **Enable remote access** in Electron to create `antsnest.<domain>` and a single-use pairing QR code. Each paired browser exchanges that code for its own random device token. The desktop app lists authorized devices and can revoke one browser or all browsers at any time.
+Open **Remote access** in Electron and select **Enable remote access** to create `antsnest.<domain>` and a single-use pairing QR code. Each paired browser exchanges that code for its own random device token. The desktop app lists authorized devices and can revoke one browser or all browsers at any time.
 
 Once enabled, Remote access runs as a lightweight background service: closing the desktop window does not take the URL offline, and opening Ants Nest again reconnects to the same service. Ants Nest also installs a user-login autostart entry while Remote access is enabled so the dashboard returns after a logout or reboot. Disabling Remote access removes that entry, releases the hostname, and lets the background process exit.
 
