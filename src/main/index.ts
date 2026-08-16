@@ -14,11 +14,25 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
 app.on("second-instance", () => {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  const window = mainWindow;
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
 });
+
+function notifyRendererStateChanged() {
+  const window = mainWindow;
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return;
+  try {
+    window.webContents.send("ants:state-changed");
+  } catch (error) {
+    // The native window can be destroyed between the checks above and send()
+    // while Electron is shutting down. Ignore only that expected close race.
+    if (error instanceof Error && error.message.includes("Object has been destroyed")) return;
+    throw error;
+  }
+}
 
 async function performAppControl(request: AppControlRequest): Promise<RemoteAccessState> {
   let result: RemoteAccessState;
@@ -30,7 +44,7 @@ async function performAppControl(request: AppControlRequest): Promise<RemoteAcce
     case "remote-revoke-all": result = await revokeAllRemoteDevices(); break;
     case "remote-disable": result = await stopRemoteAccess(); break;
   }
-  if (request.operation !== "remote-status") mainWindow?.webContents.send("ants:state-changed");
+  if (request.operation !== "remote-status") notifyRendererStateChanged();
   return result;
 }
 
@@ -71,7 +85,7 @@ function registerIpc() {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1180,
     height: 780,
     minWidth: 920,
@@ -88,22 +102,24 @@ function createWindow() {
       sandbox: true,
     },
   });
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow = window;
+  window.once("ready-to-show", () => { if (!window.isDestroyed()) window.show(); });
+  window.once("closed", () => { if (mainWindow === window) mainWindow = undefined; });
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
   const developmentUrl = process.env.VITE_DEV_SERVER_URL || (!app.isPackaged ? "http://localhost:5173" : undefined);
   if (developmentUrl) {
-    void mainWindow.loadURL(developmentUrl).catch(() => {
-      setTimeout(() => void mainWindow?.loadURL(developmentUrl), 500);
+    void window.loadURL(developmentUrl).catch(() => {
+      setTimeout(() => { if (!window.isDestroyed()) void window.loadURL(developmentUrl); }, 500);
     });
-  } else void mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  } else void window.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 }
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
-  stopStateChangeServer = await startStateChangeServer(() => mainWindow?.webContents.send("ants:state-changed"));
+  stopStateChangeServer = await startStateChangeServer(notifyRendererStateChanged);
   stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();
   createWindow();

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import QRCode from "qrcode";
+import packageMetadata from "../../package.json";
 import { requestAppControl } from "../core/app-control";
 import { configureCloudflare, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
 import { formatRemaining, parseDuration, parseExpirationTime } from "../shared/duration";
 import type { CloudflareSetupInput, RemoteAccessState } from "../shared/types";
 
 const program = new Command();
-program.name("ants-nest").description("Create and manage Cloudflare Tunnel share links").version("0.1.0");
+program.name("ants-nest").description("Create and manage Cloudflare Tunnel share links").version(packageMetadata.version);
 
 function output(value: unknown, json?: boolean) {
   if (json) console.log(JSON.stringify(value, null, 2));
