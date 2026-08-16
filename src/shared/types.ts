@@ -79,7 +79,7 @@ export type CliInstallationStatus = {
   binDirectory: string;
   commands: string[];
   onPath: boolean;
-  mode?: "appimage" | "repository";
+  mode?: "appimage" | "desktop" | "repository";
   version?: string;
   reason?: string;
 };

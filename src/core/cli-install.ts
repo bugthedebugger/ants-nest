@@ -3,10 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import type { CliInstallationStatus } from "../shared/types";
 
-const managedMarker = "# Managed by Ants Nest CLI installer";
+const managedMarker = "Managed by Ants Nest CLI installer";
 
 export type CliInstallTarget =
   | { mode: "appimage"; executablePath: string; fontconfigPath: string; version: string }
+  | { mode: "desktop"; executablePath: string; version: string }
   | { mode: "repository"; nodePath: string; scriptPath: string; version: string };
 
 type CliInstallOptions = {
@@ -15,8 +16,10 @@ type CliInstallOptions = {
   platform?: NodeJS.Platform;
 };
 
-function locations(homeDirectory = os.homedir()) {
-  const binDirectory = path.join(homeDirectory, ".local", "bin");
+function locations(homeDirectory = os.homedir(), platform: NodeJS.Platform = process.platform) {
+  const binDirectory = platform === "win32"
+    ? path.join(homeDirectory, "AppData", "Local", "Ants Nest", "bin")
+    : path.join(homeDirectory, ".local", "bin");
   const appDirectory = path.join(homeDirectory, ".local", "share", "ants-nest");
   const applicationsDirectory = path.join(homeDirectory, ".local", "share", "applications");
   return {
@@ -27,7 +30,7 @@ function locations(homeDirectory = os.homedir()) {
     icon: path.join(appDirectory, "icon.png"),
     desktopEntry: path.join(applicationsDirectory, "ants-nest.desktop"),
     applicationsDirectory,
-    launchers: [path.join(binDirectory, "ants"), path.join(binDirectory, "ants-nest")],
+    launchers: ["ants", "ants-nest"].map((name) => path.join(binDirectory, platform === "win32" ? `${name}.cmd` : name)),
   };
 }
 
@@ -39,12 +42,24 @@ function launcherMetadata(target: CliInstallTarget) {
   return `# ants-nest-cli mode=${target.mode} version=${target.version}`;
 }
 
-function launcherScript(target: CliInstallTarget, appImage: string) {
+function batchQuote(value: string) {
+  return `"${value.replaceAll("%", "%%").replaceAll('"', '""')}"`;
+}
+
+function launcherScript(target: CliInstallTarget, appImage: string, platform: NodeJS.Platform) {
   const command = target.mode === "appimage"
     ? `${shellQuote(appImage)} --cli`
+    : target.mode === "desktop"
+      ? `${shellQuote(target.executablePath)} --cli`
     : `${shellQuote(target.nodePath)} ${shellQuote(target.scriptPath)}`;
+  if (platform === "win32") {
+    const batchCommand = target.mode === "repository"
+      ? `${batchQuote(target.nodePath)} ${batchQuote(target.scriptPath)}`
+      : `${batchQuote(target.executablePath)} --cli`;
+    return `@echo off\r\nrem ${managedMarker}\r\nrem ${launcherMetadata(target).slice(2)}\r\n${batchCommand} %*\r\n`;
+  }
   const environment = target.mode === "appimage" ? `export FONTCONFIG_FILE=${shellQuote(path.join(path.dirname(appImage), "fontconfig-cli.conf"))}\n` : "";
-  return `#!/bin/sh\n${managedMarker}\n${launcherMetadata(target)}\nunset ELECTRON_RUN_AS_NODE\n${environment}exec ${command} "$@"\n`;
+  return `#!/bin/sh\n# ${managedMarker}\n${launcherMetadata(target)}\nunset ELECTRON_RUN_AS_NODE\n${environment}exec ${command} "$@"\n`;
 }
 
 async function readLauncher(file: string) {
@@ -88,29 +103,29 @@ async function atomicCopy(source: string, destination: string, mode = 0o755) {
 
 export async function cliInstallationStatus(options: CliInstallOptions = {}): Promise<CliInstallationStatus> {
   const platform = options.platform || process.platform;
-  const target = locations(options.homeDirectory);
+  const target = locations(options.homeDirectory, platform);
   const launchers = await Promise.all(target.launchers.map(readLauncher));
   const desktopEntry = await readLauncher(target.desktopEntry);
   const managed = launchers.filter((value) => value?.includes(managedMarker)).length;
-  const metadata = launchers.find((value) => value?.includes("# ants-nest-cli "))?.match(/mode=(appimage|repository) version=([^\s]+)/);
+  const metadata = launchers.find((value) => value?.includes("ants-nest-cli "))?.match(/mode=(appimage|desktop|repository) version=([^\s]+)/);
   const pathEntries = (options.pathValue ?? process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
   return {
-    supported: platform === "linux",
+    supported: ["linux", "darwin", "win32"].includes(platform),
     installed: managed === target.launchers.length,
     appInstalled: Boolean(desktopEntry?.includes(managedMarker)),
     binDirectory: target.binDirectory,
-    commands: target.launchers.map((file) => path.basename(file)),
+    commands: ["ants", "ants-nest"],
     onPath: pathEntries.includes(path.resolve(target.binDirectory)),
-    ...(metadata?.[1] ? { mode: metadata[1] as "appimage" | "repository" } : {}),
+    ...(metadata?.[1] ? { mode: metadata[1] as "appimage" | "desktop" | "repository" } : {}),
     ...(metadata?.[2] ? { version: metadata[2] } : {}),
-    ...(platform !== "linux" ? { reason: "Automatic CLI installation is currently available on Linux." } : {}),
+    ...(!["linux", "darwin", "win32"].includes(platform) ? { reason: `Automatic CLI installation is not available on ${platform}.` } : {}),
   };
 }
 
 export async function installDesktopApp(iconSource: string, options: CliInstallOptions = {}): Promise<CliInstallationStatus> {
   const platform = options.platform || process.platform;
   if (platform !== "linux") throw new Error("Automatic AppImage installation is currently available on Linux");
-  const destination = locations(options.homeDirectory);
+  const destination = locations(options.homeDirectory, platform);
   const existing = await readLauncher(destination.desktopEntry);
   if (existing !== undefined && !existing.includes(managedMarker)) {
     throw new Error(`${destination.desktopEntry} already exists and is not managed by Ants Nest. Move or remove it before installing.`);
@@ -120,15 +135,16 @@ export async function installDesktopApp(iconSource: string, options: CliInstallO
   await fs.mkdir(destination.applicationsDirectory, { recursive: true, mode: 0o700 });
   await atomicCopy(iconSource, destination.icon, 0o644);
   const executable = destination.appImage.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-  const desktop = `[Desktop Entry]\n${managedMarker}\nType=Application\nName=Ants Nest\nComment=Local-first Cloudflare Tunnel manager\nExec="${executable}"\nIcon=${destination.icon}\nTerminal=false\nCategories=Development;Network;\nStartupWMClass=ants-nest\n`;
+  const desktop = `[Desktop Entry]\n# ${managedMarker}\nType=Application\nName=Ants Nest\nComment=Local-first Cloudflare Tunnel manager\nExec="${executable}"\nIcon=${destination.icon}\nTerminal=false\nCategories=Development;Network;\nStartupWMClass=ants-nest\n`;
   await atomicWrite(destination.desktopEntry, desktop, 0o644);
   return cliInstallationStatus(options);
 }
 
 export async function installCli(target: CliInstallTarget, options: CliInstallOptions = {}): Promise<CliInstallationStatus> {
   const platform = options.platform || process.platform;
-  if (platform !== "linux") throw new Error("Automatic CLI installation is currently available on Linux");
-  const destination = locations(options.homeDirectory);
+  if (!["linux", "darwin", "win32"].includes(platform)) throw new Error(`Automatic CLI installation is not available on ${platform}`);
+  if (target.mode === "appimage" && platform !== "linux") throw new Error("AppImage-backed CLI installation is available only on Linux");
+  const destination = locations(options.homeDirectory, platform);
   await assertSafeLauncherTargets(destination.launchers);
   await fs.mkdir(destination.binDirectory, { recursive: true, mode: 0o700 });
   if (target.mode === "appimage") {
@@ -139,16 +155,19 @@ export async function installCli(target: CliInstallTarget, options: CliInstallOp
       atomicCopy(source, destination.appImage),
       atomicCopy(target.fontconfigPath, destination.fontconfig, 0o600),
     ]);
-  } else {
+  } else if (target.mode === "repository") {
     await Promise.all([fs.access(target.nodePath), fs.access(target.scriptPath)]);
+  } else {
+    await fs.access(target.executablePath);
   }
-  const script = launcherScript(target, destination.appImage);
+  const script = launcherScript(target, destination.appImage, platform);
   await Promise.all(destination.launchers.map((file) => atomicWrite(file, script, 0o755)));
   return cliInstallationStatus(options);
 }
 
 export async function uninstallCli(options: CliInstallOptions = {}): Promise<CliInstallationStatus> {
-  const destination = locations(options.homeDirectory);
+  const platform = options.platform || process.platform;
+  const destination = locations(options.homeDirectory, platform);
   await assertSafeLauncherTargets(destination.launchers);
   const launchers = await Promise.all(destination.launchers.map(readLauncher));
   await Promise.all(destination.launchers.map((file, index) => launchers[index]?.includes(managedMarker) ? fs.rm(file, { force: true }) : undefined));
@@ -162,7 +181,8 @@ export async function uninstallCli(options: CliInstallOptions = {}): Promise<Cli
 }
 
 export async function uninstallAll(options: CliInstallOptions = {}): Promise<CliInstallationStatus> {
-  const destination = locations(options.homeDirectory);
+  const platform = options.platform || process.platform;
+  const destination = locations(options.homeDirectory, platform);
   const desktopEntry = await readLauncher(destination.desktopEntry);
   if (desktopEntry !== undefined && !desktopEntry.includes(managedMarker)) {
     throw new Error(`${destination.desktopEntry} is not managed by Ants Nest and will not be removed.`);

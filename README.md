@@ -33,25 +33,31 @@ Stopping, removing, or expiring a managed share terminates its connector, delete
 
 ## Install
 
-Install only the CLI (requires Node.js 22 or newer):
+Install only the CLI on Linux or macOS (requires Node.js 22 or newer):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.sh | sh -s -- --cli-only
 ```
 
-Install the desktop AppImage and CLI together (does not require Node.js):
+Install only the CLI on Windows from PowerShell (requires Node.js 22 or newer):
+
+```powershell
+irm https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.ps1 | iex
+```
+
+Install the Linux desktop AppImage and CLI together (does not require Node.js):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.sh | sh -s -- --all
 ```
 
-Both commands download assets from the latest GitHub release, verify GitHub's SHA-256 digest, refuse to replace unrelated commands, and install `ants` plus `ants-nest` under `~/.local/bin`. The full install also adds Ants Nest to the desktop application menu. You can inspect [install.sh](install.sh) before piping it to `sh`.
+All installers download assets from the latest GitHub release, verify GitHub's SHA-256 digest, and refuse to replace unrelated commands. Linux and macOS install `ants` plus `ants-nest` under `~/.local/bin`; Windows installs native launchers under `%LOCALAPPDATA%\Ants Nest\bin` and adds that directory to the user PATH. The Linux full install also adds Ants Nest to the desktop application menu. You can inspect [install.sh](install.sh) or [install.ps1](install.ps1) before executing it.
 
-If you downloaded the AppImage yourself, open **Settings → Agent CLI → Install CLI**. Ants Nest copies the AppImage to a stable user-local location and installs the same commands without relying on system Node.js.
+From any packaged desktop build, open **Settings → Agent CLI → Install CLI**. Linux copies the AppImage to a stable user-local location and uses its bundled runtime; macOS and Windows create native launchers for the installed desktop executable.
 
 ## Requirements
 
-- Node.js 22 or newer for development or the CLI-only installation. The AppImage-backed CLI includes its own runtime.
+- Node.js 22 or newer for development or standalone CLI installation on Linux, macOS, or Windows. The Linux AppImage-backed CLI includes its own runtime.
 - A Cloudflare zone and an API token with:
   - Account → Cloudflare Tunnel → Edit
   - Zone → DNS → Edit
@@ -86,7 +92,7 @@ npm run install:cli
 ants doctor --json
 ```
 
-Install both the locally built AppImage and its CLI/Desktop entry:
+On Linux, install both the locally built AppImage and its CLI/Desktop entry:
 
 ```bash
 npm run install:all

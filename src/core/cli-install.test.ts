@@ -46,8 +46,32 @@ describe("CLI installer", () => {
     await expect(installCli({ mode: "repository", nodePath, scriptPath, version: "1.2.4" }, options)).rejects.toThrow("not managed by Ants Nest");
   });
 
-  it("reports unsupported platforms without mutating the filesystem", async () => {
-    const status = await cliInstallationStatus({ homeDirectory: path.join(directory, "home"), platform: "darwin" });
-    expect(status).toMatchObject({ supported: false, installed: false });
+  it("installs repository launchers on macOS and Windows", async () => {
+    const nodePath = path.join(directory, "node");
+    const scriptPath = path.join(directory, "index.cjs");
+    await Promise.all([fs.writeFile(nodePath, "node"), fs.writeFile(scriptPath, "cli")]);
+
+    const macHome = path.join(directory, "mac-home");
+    expect(await installCli({ mode: "repository", nodePath, scriptPath, version: "1.2.3" }, { homeDirectory: macHome, platform: "darwin" })).toMatchObject({ supported: true, installed: true });
+    expect(await fs.readFile(path.join(macHome, ".local", "bin", "ants"), "utf8")).toContain("#!/bin/sh");
+
+    const windowsHome = path.join(directory, "windows-home");
+    expect(await installCli({ mode: "repository", nodePath, scriptPath, version: "1.2.3" }, { homeDirectory: windowsHome, platform: "win32" })).toMatchObject({ supported: true, installed: true });
+    const launcher = await fs.readFile(path.join(windowsHome, "AppData", "Local", "Ants Nest", "bin", "ants-nest.cmd"), "utf8");
+    expect(launcher).toContain("@echo off");
+    expect(launcher).toContain(`"${nodePath}" "${scriptPath}" %*`);
+  });
+
+  it("installs desktop-backed launchers on macOS and Windows", async () => {
+    const executablePath = path.join(directory, "Ants Nest executable");
+    await fs.writeFile(executablePath, "desktop app");
+
+    const macHome = path.join(directory, "mac-desktop-home");
+    await installCli({ mode: "desktop", executablePath, version: "1.2.3" }, { homeDirectory: macHome, platform: "darwin" });
+    expect(await fs.readFile(path.join(macHome, ".local", "bin", "ants"), "utf8")).toContain(`'${executablePath}' --cli`);
+
+    const windowsHome = path.join(directory, "windows-desktop-home");
+    await installCli({ mode: "desktop", executablePath, version: "1.2.3" }, { homeDirectory: windowsHome, platform: "win32" });
+    expect(await fs.readFile(path.join(windowsHome, "AppData", "Local", "Ants Nest", "bin", "ants.cmd"), "utf8")).toContain(`"${executablePath}" --cli %*`);
   });
 });
