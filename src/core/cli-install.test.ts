@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cliInstallationStatus, installCli, installDesktopApp, uninstallAll, uninstallCli } from "./cli-install";
+import { cliInstallationStatus, installCli, installDesktopApp, probeDesktopCliVersion, uninstallAll, uninstallCli } from "./cli-install";
 
 let directory = "";
 
@@ -10,6 +10,12 @@ beforeEach(async () => { directory = await fs.mkdtemp(path.join(os.tmpdir(), "an
 afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }); });
 
 describe("CLI installer", () => {
+  it("reads the real version from a packaged desktop executable", async () => {
+    const executable = path.join(directory, "fake-desktop");
+    await fs.writeFile(executable, "#!/bin/sh\nprintf '2.3.4\\n'\n", { mode: 0o755 });
+    expect(await probeDesktopCliVersion(executable)).toBe("2.3.4");
+  });
+
   it("installs AppImage-backed commands and removes only managed files", async () => {
     const source = path.join(directory, "downloaded.AppImage");
     const fontconfig = path.join(directory, "fontconfig-cli.conf");

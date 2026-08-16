@@ -5,7 +5,7 @@ import packageMetadata from "../package.json" with { type: "json" };
 
 const root = process.cwd();
 const releaseDirectory = path.join(root, "release");
-const appImage = path.join(releaseDirectory, `Ants.Nest-${packageMetadata.version}.AppImage`);
+const appImage = path.join(releaseDirectory, "Ants.Nest.AppImage");
 await fs.access(appImage);
 await Promise.all([
   fs.copyFile(path.join(root, "dist", "cli", "index.cjs"), path.join(releaseDirectory, "ants-nest-cli.cjs")),

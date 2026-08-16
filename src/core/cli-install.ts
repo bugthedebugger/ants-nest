@@ -1,9 +1,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { CliInstallationStatus } from "../shared/types";
 
 const managedMarker = "Managed by Ants Nest CLI installer";
+const execFileAsync = promisify(execFile);
 
 export type CliInstallTarget =
   | { mode: "appimage"; executablePath: string; fontconfigPath: string; version: string }
@@ -15,6 +18,16 @@ type CliInstallOptions = {
   pathValue?: string;
   platform?: NodeJS.Platform;
 };
+
+export async function probeDesktopCliVersion(executablePath: string, fontconfigPath?: string) {
+  const environment = { ...process.env };
+  delete environment.ELECTRON_RUN_AS_NODE;
+  if (fontconfigPath) environment.FONTCONFIG_FILE = fontconfigPath;
+  const { stdout } = await execFileAsync(executablePath, ["--cli", "--version"], { env: environment, timeout: 15_000, windowsHide: true });
+  const version = stdout.trim();
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`Could not determine the CLI version from ${executablePath}`);
+  return version;
+}
 
 function locations(homeDirectory = os.homedir(), platform: NodeJS.Platform = process.platform) {
   const binDirectory = platform === "win32"

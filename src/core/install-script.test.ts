@@ -26,7 +26,7 @@ beforeEach(async () => {
     tag_name: "v1.2.3",
     assets: [
       { name: "ants-nest-cli.cjs", digest: `sha256:${digest(cli)}`, browser_download_url: "mock://cli" },
-      { name: "Ants.Nest-1.2.3.AppImage", digest: `sha256:${digest(appImage)}`, browser_download_url: "mock://appimage" },
+      { name: "Ants.Nest.AppImage", digest: `sha256:${digest(appImage)}`, browser_download_url: "mock://appimage" },
       { name: "ants-nest-icon.png", digest: `sha256:${digest(icon)}`, browser_download_url: "mock://icon" },
     ],
   };
