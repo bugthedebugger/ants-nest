@@ -142,10 +142,23 @@ button.secondary:hover { background: #202020; border-color: #444; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .setup-modal { width: min(540px, 100%); }
-.settings-form { width: min(680px, 100%); padding: 22px; }
+.settings-stack { width: min(680px, 100%); display: grid; gap: 14px; }
+.settings-form { width: 100%; padding: 22px; }
 .settings-form label code, .setup-modal label code { color: #aaa8a2; font: 9px ui-monospace, monospace; letter-spacing: .03em; }
 .form-actions { margin-top: 22px; padding-top: 16px; border-top: 1px solid #2b2b2b; display: flex; justify-content: flex-end; }
 .configured-warning { justify-content: flex-start; gap: 7px; }
+.cli-install-panel { padding: 22px; }
+.cli-install-panel .panel-heading { margin-bottom: 14px; }
+.cli-install-panel code { color: #cfcdc6; font: 10px ui-monospace, monospace; }
+.cli-install-note { padding: 11px; border: 1px dashed #343434; border-radius: 8px; color: #85837e; background: #101010; font-size: 10px; }
+.cli-install-status { min-height: 54px; padding: 11px 12px; border: 1px solid #303030; border-radius: 9px; display: flex; align-items: flex-start; gap: 10px; background: #101010; }
+.cli-install-status > i { width: 7px; height: 7px; margin-top: 4px; flex: none; border-radius: 50%; background: #555; }
+.cli-install-status > i.ok { background: #d4d1ca; box-shadow: 0 0 0 3px #d4d1ca12; }
+.cli-install-status strong, .cli-install-status span, .cli-install-status small { display: block; }
+.cli-install-status strong { color: #d9d7d1; font-size: 10px; }
+.cli-install-status span { margin-top: 4px; color: #777570; font: 9px ui-monospace, monospace; }
+.cli-install-status small { margin-top: 5px; color: #aaa8a2; font-size: 9px; }
+.cli-install-panel .form-actions { gap: 8px; }
 .setup-error { margin-bottom: 8px; }
 .token-permissions, .security-note { padding: 11px; border: 1px solid #303030; border-radius: 9px; display: flex; gap: 10px; color: #9a9892; background: #111; }
 .token-permissions svg, .security-note > svg { flex: none; }

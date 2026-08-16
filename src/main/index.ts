@@ -5,6 +5,15 @@ import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
+import { cliInstallationStatus, installCli, uninstallCli } from "../core/cli-install";
+
+const cliArgumentIndex = process.argv.indexOf("--cli");
+if (cliArgumentIndex >= 0) {
+  void import("../cli/embedded")
+    .then(({ runEmbeddedCli }) => runEmbeddedCli(process.argv.slice(cliArgumentIndex + 1)))
+    .then(() => app.exit(typeof process.exitCode === "number" ? process.exitCode : 0))
+    .catch((error) => { console.error(error instanceof Error ? error.message : String(error)); app.exit(1); });
+} else {
 
 let mainWindow: BrowserWindow | undefined;
 let stopStateChangeServer: (() => Promise<void>) | undefined;
@@ -58,6 +67,12 @@ async function stopLocalServers() {
   await Promise.all([stopStateChangeServer?.(), stopAppControlServer?.()]);
 }
 
+async function desktopCliInstallationStatus() {
+  const status = await cliInstallationStatus();
+  if (status.installed || process.env.APPIMAGE) return status;
+  return { ...status, supported: false, reason: "Open the packaged Linux AppImage to install the CLI, or run npm run install:cli from the repository." };
+}
+
 function registerIpc() {
   ipcMain.handle("ants:doctor", () => doctor());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
@@ -77,6 +92,13 @@ function registerIpc() {
   ipcMain.handle("ants:new-remote-pairing", () => newRemotePairing());
   ipcMain.handle("ants:revoke-remote-device", (_event, id: unknown) => revokeRemoteDevice(String(id)));
   ipcMain.handle("ants:revoke-all-remote-devices", () => revokeAllRemoteDevices());
+  ipcMain.handle("ants:cli-installation-status", () => desktopCliInstallationStatus());
+  ipcMain.handle("ants:install-cli", () => {
+    const appImage = process.env.APPIMAGE;
+    if (!appImage) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
+    return installCli({ mode: "appimage", executablePath: appImage, version: app.getVersion() });
+  });
+  ipcMain.handle("ants:uninstall-cli", () => uninstallCli());
   ipcMain.handle("ants:open-external", async (_event, rawUrl: unknown) => {
     const url = new URL(String(rawUrl));
     if (!["https:", "http:"].includes(url.protocol)) throw new Error("Unsupported link protocol");
@@ -141,3 +163,4 @@ app.on("before-quit", (event) => {
   void shutdownRemoteAccess().then(stopLocalServers).finally(() => { quitting = true; app.quit(); });
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+}

@@ -22,6 +22,9 @@ const api: AntsNestApi = {
   newRemotePairing: () => ipcRenderer.invoke("ants:new-remote-pairing"),
   revokeRemoteDevice: (id) => ipcRenderer.invoke("ants:revoke-remote-device", id),
   revokeAllRemoteDevices: () => ipcRenderer.invoke("ants:revoke-all-remote-devices"),
+  cliInstallationStatus: () => ipcRenderer.invoke("ants:cli-installation-status"),
+  installCli: () => ipcRenderer.invoke("ants:install-cli"),
+  uninstallCli: () => ipcRenderer.invoke("ants:uninstall-cli"),
   openExternal: (url) => ipcRenderer.invoke("ants:open-external", url),
 };
 

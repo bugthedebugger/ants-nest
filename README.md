@@ -12,6 +12,7 @@ There is no Ants Nest account or hosted backend. The desktop app, CLI, Cloudflar
 - Control tunnels from a phone through `antsnest.<domain>` with single-use QR pairing.
 - Revoke individual phone browsers or every authorized device immediately.
 - Configure Cloudflare once from either the desktop app or CLI.
+- Install just the CLI or the complete AppImage + CLI with one command.
 - Share one WAL-enabled SQLite state store between Electron and the CLI, with real-time desktop refresh.
 - Install and update the official `cloudflared` binary during setup after SHA-256 verification.
 - Never replace an existing DNS record.
@@ -30,16 +31,34 @@ These are first-level subdomains, so a normal full Cloudflare zone can serve the
 
 Stopping, removing, or expiring a managed share terminates its connector, deletes the DNS record and Cloudflare Tunnel owned by Ants Nest, removes its connector token, and releases the hostname. Treat `stop` as terminal for that share; create a new one if it is needed again.
 
+## Install
+
+Install only the CLI (requires Node.js 22 or newer):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.sh | sh -s -- --cli-only
+```
+
+Install the desktop AppImage and CLI together (does not require Node.js):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.sh | sh -s -- --all
+```
+
+Both commands download assets from the latest GitHub release, verify GitHub's SHA-256 digest, refuse to replace unrelated commands, and install `ants` plus `ants-nest` under `~/.local/bin`. The full install also adds Ants Nest to the desktop application menu. You can inspect [install.sh](install.sh) before piping it to `sh`.
+
+If you downloaded the AppImage yourself, open **Settings → Agent CLI → Install CLI**. Ants Nest copies the AppImage to a stable user-local location and installs the same commands without relying on system Node.js.
+
 ## Requirements
 
-- Node.js 22 or newer for development and CLI use.
+- Node.js 22 or newer for development or the CLI-only installation. The AppImage-backed CLI includes its own runtime.
 - A Cloudflare zone and an API token with:
   - Account → Cloudflare Tunnel → Edit
   - Zone → DNS → Edit
 
 You do not need to install `cloudflared` manually. Setup downloads the current official binary into Ants Nest's private data directory and verifies its published SHA-256 digest.
 
-## Install and run
+## Develop from the repository
 
 Install dependencies and start the development build:
 
@@ -60,14 +79,20 @@ Create a platform package under `release/`:
 npm run package
 ```
 
-Expose the CLI commands locally during development:
+Install only the repository CLI:
 
 ```bash
-npm link
+npm run install:cli
 ants doctor --json
 ```
 
-Both `ants` and `ants-nest` invoke the same CLI.
+Install both the locally built AppImage and its CLI/Desktop entry:
+
+```bash
+npm run install:all
+```
+
+Remove managed installations with `npm run uninstall:cli` or `npm run uninstall:all`. Both `ants` and `ants-nest` invoke the same CLI.
 
 ## One-time Cloudflare setup
 

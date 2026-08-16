@@ -7,6 +7,8 @@ description: Publish and manage local services with the Ants Nest CLI. Use when 
 
 Use `ants` for commands and request JSON whenever available. Fall back to `ants-nest` if `ants` is not on `PATH`.
 
+If neither command exists, do not install software without permission. Tell the user that Ants Nest supports a CLI-only installer, a complete AppImage + CLI installer, and **Settings → Agent CLI → Install CLI** in the desktop app.
+
 ## Check readiness
 
 Run:

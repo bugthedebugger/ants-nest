@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Command, Copy, FileText, Globe2, MonitorSmartphone, MoreHorizontal, Phone, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
-import type { CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
+import type { CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
 import { formatRemaining } from "../shared/duration";
 
 type Page = "tunnels" | "remote" | "settings";
@@ -37,6 +37,7 @@ export function App() {
   const [tunnels, setTunnels] = useState<TunnelView[]>([]);
   const [doctor, setDoctor] = useState<DoctorResult>();
   const [remote, setRemote] = useState<RemoteAccessState>({ enabled: false, devices: [] });
+  const [cliInstallation, setCliInstallation] = useState<CliInstallationStatus>();
   const [qrCode, setQrCode] = useState<string>();
   const [page, setPage] = useState<Page>("tunnels");
   const [modal, setModal] = useState<Modal>(null);
@@ -46,8 +47,8 @@ export function App() {
   const [error, setError] = useState<string>();
 
   const refresh = useCallback(async () => {
-    const [nextTunnels, nextDoctor, nextRemote] = await Promise.all([window.antsNest.list(), window.antsNest.doctor(), window.antsNest.remoteStatus()]);
-    setTunnels(nextTunnels); setDoctor(nextDoctor); setRemote(nextRemote);
+    const [nextTunnels, nextDoctor, nextRemote, nextCliInstallation] = await Promise.all([window.antsNest.list(), window.antsNest.doctor(), window.antsNest.remoteStatus(), window.antsNest.cliInstallationStatus()]);
+    setTunnels(nextTunnels); setDoctor(nextDoctor); setRemote(nextRemote); setCliInstallation(nextCliInstallation);
   }, []);
   useEffect(() => {
     void refresh().catch((e) => setError(message(e)));
@@ -129,8 +130,10 @@ export function App() {
           onRevokeAll={() => void action("revoke-all", async () => setRemote(await window.antsNest.revokeAllRemoteDevices()))}
           onStop={() => void action("remote-stop", async () => setRemote(await window.antsNest.stopRemote()))} />}
 
-        {page === "settings" && <SettingsPage configured={doctor?.authenticated ?? false} busy={busy === "setup"} error={error} configuredDomain={doctor?.proxyDomain}
-          onDismissError={() => setError(undefined)} onSave={async (input) => { await action("setup", () => window.antsNest.configureCloudflare(input)); }} />}
+        {page === "settings" && <SettingsPage configured={doctor?.authenticated ?? false} busy={busy === "setup"} cliBusy={busy} cliInstallation={cliInstallation} error={error} configuredDomain={doctor?.proxyDomain}
+          onDismissError={() => setError(undefined)} onSave={async (input) => { await action("setup", () => window.antsNest.configureCloudflare(input)); }}
+          onInstallCli={async () => { await action("install-cli", async () => setCliInstallation(await window.antsNest.installCli())); }}
+          onUninstallCli={async () => { await action("uninstall-cli", async () => setCliInstallation(await window.antsNest.uninstallCli())); }} />}
       </main>
 
       {modal === "tunnel" && <TunnelModal installed={doctor?.installed ?? false} proxyDomain={doctor?.proxyDomain} onClose={() => setModal(null)} onComplete={async (task) => { if (await action("create", task)) setModal(null); }} busy={busy === "create"} />}
@@ -155,7 +158,7 @@ function RemotePage({ state, qrCode, busy, installed, proxyDomain, error, onDism
   </div>;
 }
 
-function SettingsPage({ configured, busy, error, configuredDomain, onDismissError, onSave }: { configured: boolean; busy: boolean; error?: string | undefined; configuredDomain?: string | undefined; onDismissError(): void; onSave(input: CloudflareSetupInput): Promise<void> }) {
+function SettingsPage({ configured, busy, cliBusy, cliInstallation, error, configuredDomain, onDismissError, onSave, onInstallCli, onUninstallCli }: { configured: boolean; busy: boolean; cliBusy?: string | undefined; cliInstallation?: CliInstallationStatus | undefined; error?: string | undefined; configuredDomain?: string | undefined; onDismissError(): void; onSave(input: CloudflareSetupInput): Promise<void>; onInstallCli(): Promise<void>; onUninstallCli(): Promise<void> }) {
   const [proxyDomain, setProxyDomain] = useState("");
   const [zoneId, setZoneId] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -164,7 +167,7 @@ function SettingsPage({ configured, busy, error, configuredDomain, onDismissErro
     event.preventDefault();
     void onSave({ proxyDomain, zoneId, accountId, apiToken });
   }
-  return <div className="page settings-page"><header><div><h1>Settings</h1><p>Manage the Cloudflare connection shared by the app and CLI.</p></div></header><form className="page-panel settings-form" onSubmit={submit}>
+  return <div className="page settings-page"><header><div><h1>Settings</h1><p>Manage the Cloudflare connection shared by the app and CLI.</p></div></header><div className="settings-stack"><form className="page-panel settings-form" onSubmit={submit}>
     <div className="panel-heading"><div className="kind-icon named"><Cloud size={19}/></div><div><h2>{configured ? "Cloudflare configuration" : "Configure Cloudflare"}</h2><p>{configured ? `Connected to ${configuredDomain || "your Cloudflare domain"}. Enter all four values to replace the configuration.` : "Validates API access and installs the latest official cloudflared release."}</p></div></div>
     {error && <div className="error setup-error"><span>{error}</span><button type="button" onClick={onDismissError}><X size={15}/></button></div>}
     {configured && <div className="warning configured-warning"><Check size={15}/> Saving replaces the current configuration after the new values are validated.</div>}
@@ -174,7 +177,12 @@ function SettingsPage({ configured, busy, error, configuredDomain, onDismissErro
     <label><code>CLOUDFLARE_API_TOKEN</code><input type="password" autoComplete="off" value={apiToken} onChange={(event) => setApiToken(event.target.value)} placeholder="Token with Tunnel Edit + DNS Edit" required /><small>Stored locally in ~/.ants-nest/cloudflare.json with user-only permissions.</small></label>
     <div className="token-permissions"><ShieldCheck size={16}/><div><strong>Required token permissions</strong><p>Account · Cloudflare Tunnel · Edit<br/>Zone · DNS · Edit</p></div></div>
     <div className="form-actions"><button className="primary" disabled={busy}>{busy ? <><RefreshCw className="spin" size={15}/> Setting up…</> : <><Check size={15}/> Install, validate & save</>}</button></div>
-  </form></div>;
+  </form><section className="page-panel cli-install-panel"><div className="panel-heading"><div className="kind-icon named"><Terminal size={19}/></div><div><h2>Agent CLI</h2><p>Install the <code>ants</code> and <code>ants-nest</code> commands for every local terminal and coding agent.</p></div></div>
+    {!cliInstallation?.supported ? <div className="cli-install-note">{cliInstallation?.reason || "CLI installation is available from the packaged Linux AppImage."}</div> : <>
+      <div className="cli-install-status"><i className={cliInstallation.installed ? "ok" : ""}/><div><strong>{cliInstallation.installed ? `CLI ${cliInstallation.version || ""} installed` : "CLI not installed"}</strong><span>{cliInstallation.installed ? `${cliInstallation.commands.join(" and ")} are in ${cliInstallation.binDirectory}` : `Installs commands into ${cliInstallation.binDirectory}`}</span>{cliInstallation.installed && !cliInstallation.onPath && <small>Add this directory to PATH, then open a new terminal.</small>}</div></div>
+      <div className="form-actions">{cliInstallation.installed && <button type="button" className="secondary" disabled={cliBusy === "uninstall-cli"} onClick={() => void onUninstallCli()}>{cliBusy === "uninstall-cli" ? "Removing…" : "Uninstall CLI"}</button>}<button type="button" className="primary" disabled={cliBusy === "install-cli"} onClick={() => void onInstallCli()}>{cliBusy === "install-cli" ? <><RefreshCw className="spin" size={15}/> Installing…</> : <><Terminal size={15}/> {cliInstallation.installed ? "Update CLI" : "Install CLI"}</>}</button></div>
+    </>}
+  </section></div></div>;
 }
 
 function Empty() {

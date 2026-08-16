@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Ants Nest contributors",
   "license": "MIT",
@@ -19,12 +19,16 @@
   ],
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm:dev:main\"",
-    "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
-    "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap",
-    "package": "npm run build && electron-builder",
+    "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
+    "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap",
+    "package": "npm run build && electron-builder && node scripts/prepare-release.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root .",
     "check": "npm run typecheck && npm test && npm run build",
+    "install:cli": "npm run build && node dist/cli/install-runner.cjs install",
+    "install:all": "npm run package && node dist/cli/install-runner.cjs install-all",
+    "uninstall:cli": "npm run build && node dist/cli/install-runner.cjs uninstall",
+    "uninstall:all": "npm run build && node dist/cli/install-runner.cjs uninstall-all",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {

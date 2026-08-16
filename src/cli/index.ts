@@ -184,4 +184,4 @@ remote.command("disable").description("End Remote access and release its hostnam
   else console.log("Remote access disabled");
 }));
 
-program.parseAsync();
+export const cliCompletion = program.parseAsync();

@@ -71,6 +71,18 @@ export type RemoteDevice = {
   lastSeenAt: string;
 };
 
+export type CliInstallationStatus = {
+  supported: boolean;
+  installed: boolean;
+  appInstalled?: boolean;
+  binDirectory: string;
+  commands: string[];
+  onPath: boolean;
+  mode?: "appimage" | "repository";
+  version?: string;
+  reason?: string;
+};
+
 const shareNameSchema = z.string().trim().min(1, "Name is required").max(64).refine((value) => /[a-z0-9]/i.test(value), "Name must include an English letter or number");
 
 export const quickInputSchema = z.object({
@@ -115,5 +127,8 @@ export type AntsNestApi = {
   newRemotePairing(): Promise<RemoteAccessState>;
   revokeRemoteDevice(id: string): Promise<RemoteAccessState>;
   revokeAllRemoteDevices(): Promise<RemoteAccessState>;
+  cliInstallationStatus(): Promise<CliInstallationStatus>;
+  installCli(): Promise<CliInstallationStatus>;
+  uninstallCli(): Promise<CliInstallationStatus>;
   openExternal(url: string): Promise<void>;
 };
