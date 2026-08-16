@@ -1,19 +1,55 @@
 import path from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { configureCloudflare, createDesktopNamed, createDesktopQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
-import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema } from "../shared/types";
-import { newRemotePairing, remoteStatus, remoteTunnelId, revokeAllRemoteDevices, revokeRemoteDevice, startRemoteAccess, stopRemoteAccess } from "../core/remote";
+import { configureCloudflare, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState } from "../shared/types";
+import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
+import { startAppControlServer, type AppControlRequest } from "../core/app-control";
 
 let mainWindow: BrowserWindow | undefined;
 let stopStateChangeServer: (() => Promise<void>) | undefined;
+let stopAppControlServer: (() => Promise<void>) | undefined;
+let appControlQueue = Promise.resolve();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) app.quit();
+app.on("second-instance", () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
+async function performAppControl(request: AppControlRequest): Promise<RemoteAccessState> {
+  let result: RemoteAccessState;
+  switch (request.operation) {
+    case "remote-status": result = remoteStatus(); break;
+    case "remote-enable": result = await startRemoteAccess(); break;
+    case "remote-pair": result = newRemotePairing(); break;
+    case "remote-revoke": result = await revokeRemoteDevice(request.deviceId); break;
+    case "remote-revoke-all": result = await revokeAllRemoteDevices(); break;
+    case "remote-disable": result = await stopRemoteAccess(); break;
+  }
+  if (request.operation !== "remote-status") mainWindow?.webContents.send("ants:state-changed");
+  return result;
+}
+
+function handleAppControl(request: AppControlRequest): Promise<RemoteAccessState> {
+  const operation = appControlQueue.then(() => performAppControl(request));
+  appControlQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+async function stopLocalServers() {
+  await Promise.all([stopStateChangeServer?.(), stopAppControlServer?.()]);
+}
 
 function registerIpc() {
   ipcMain.handle("ants:doctor", () => doctor());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
   ipcMain.handle("ants:list", async () => {
     const tunnels = await listTunnels();
-    return tunnels.filter((tunnel) => tunnel.id !== remoteTunnelId());
+    return tunnels.filter((tunnel) => tunnel.id !== remoteTunnelId() && !isRemoteTunnel(tunnel));
   });
   ipcMain.handle("ants:quick", (_event, input) => createDesktopQuick(desktopQuickInputSchema.parse(input)));
   ipcMain.handle("ants:create-named", (_event, input) => createDesktopNamed(desktopNamedInputSchema.parse(input)));
@@ -40,8 +76,10 @@ function createWindow() {
     height: 780,
     minWidth: 920,
     minHeight: 620,
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    backgroundColor: "#090a0c",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    ...(process.platform !== "darwin" ? { titleBarOverlay: { color: "#101010", symbolColor: "#d8d6d0", height: 40 } } : {}),
+    autoHideMenuBar: true,
+    backgroundColor: "#0b0b0b",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -64,9 +102,12 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
   stopStateChangeServer = await startStateChangeServer(() => mainWindow?.webContents.send("ants:state-changed"));
+  stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();
   createWindow();
+  void restoreRemoteAccess().catch((error) => console.error("Could not restore remote access:", error));
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 let quitting = false;
@@ -76,11 +117,11 @@ app.on("before-quit", (event) => {
     quitting = true;
     if (stopStateChangeServer) {
       event.preventDefault();
-      void stopStateChangeServer().finally(() => app.quit());
+      void stopLocalServers().finally(() => app.quit());
     }
     return;
   }
   event.preventDefault();
-  void stopRemoteAccess().then(() => stopStateChangeServer?.()).finally(() => { quitting = true; app.quit(); });
+  void shutdownRemoteAccess().then(stopLocalServers).finally(() => { quitting = true; app.quit(); });
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

@@ -7,7 +7,7 @@ There is no Ants Nest account or hosted backend. The desktop app, CLI, Cloudflar
 ## Highlights
 
 - Create expiring quick shares and longer-lived named tunnels.
-- Use any available first-level hostname from the Electron or paired-phone UI.
+- Use any available first-level hostname from the Electron or authorized Remote access UI.
 - Give agents collision-safe CLI namespaces: `<name>-quick.<domain>` and `<name>-share.<domain>`.
 - Control tunnels from a phone through `antsnest.<domain>` with single-use QR pairing.
 - Revoke individual phone browsers or every authorized device immediately.
@@ -146,11 +146,24 @@ Use IDs from JSON output when automating. Names are accepted but can become ambi
 
 See [.agents/skills/ants-nest-cli/SKILL.md](.agents/skills/ants-nest-cli/SKILL.md) for the agent workflow bundled with this repository.
 
-## Phone access
+## Remote access
 
-Select **Enable phone access** in Electron to create `antsnest.<domain>` and a single-use pairing QR code. Each paired browser exchanges that code for its own random device token. The desktop app lists authorized devices and can revoke one browser or all browsers at any time.
+Select **Enable remote access** in Electron to create `antsnest.<domain>` and a single-use pairing QR code. Each paired browser exchanges that code for its own random device token. The desktop app lists authorized devices and can revoke one browser or all browsers at any time.
 
-Pairing credentials live in the URL fragment and are not sent in HTTP requests. The remote server binds to `127.0.0.1`, rejects unauthenticated API calls, compares token hashes in constant time, limits request bodies, and does not enable cross-origin access. Closing phone access removes the public route and invalidates every device.
+The running desktop app can also create and revoke device access through the CLI:
+
+```bash
+ants remote status
+ants remote enable
+ants remote pair
+ants remote revoke <device-id>
+ants remote revoke-all
+ants remote disable
+```
+
+`ants remote pair` prints the complete one-time pairing URL and a terminal QR code. The Electron app must be running because it owns the local Remote access server. Use `--json` for machine-readable state; pairing JSON includes both `pairingUrl` and the rendered `qr` string.
+
+Pairing credentials live in the URL fragment and are not sent in HTTP requests. The remote server binds to `127.0.0.1`, rejects unauthenticated API calls, compares token hashes in constant time, limits request bodies, and does not enable cross-origin access. Ending Remote access removes the public route and invalidates every device.
 
 ## Local state and real-time updates
 
@@ -164,7 +177,7 @@ Ants Nest stores runtime data under `~/.ants-nest` by default:
 
 Override the directory with `ANTS_NEST_HOME` or the executable with `CLOUDFLARED_BIN`. The four `CLOUDFLARE_*` environment variables take precedence over saved setup values.
 
-SQLite transactions coordinate concurrent Electron and CLI writes. A user-only local socket signals committed changes to an open Electron process, so agent-created tunnels appear in the dashboard without polling or JSON state files.
+SQLite transactions coordinate concurrent Electron and CLI writes. User-only local sockets signal committed tunnel changes to Electron and let the CLI safely request Remote access operations from the running app, so both interfaces stay on the same runtime and revocation state.
 
 ## Security model
 

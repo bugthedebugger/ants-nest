@@ -4,7 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import { paths } from "./paths";
 import { notifyStateChanged } from "./change-events";
-import { tunnelProfileSchema, tunnelSessionSchema, type TunnelProfile, type TunnelSession } from "../shared/types";
+import { tunnelProfileSchema, tunnelSessionSchema, type RemoteDevice, type TunnelProfile, type TunnelSession } from "../shared/types";
 
 const stateSchema = z.object({
   version: z.literal(1),
@@ -58,6 +58,21 @@ async function openDatabase() {
 
     CREATE INDEX IF NOT EXISTS tunnel_profiles_created_at ON tunnel_profiles(created_at DESC);
     CREATE INDEX IF NOT EXISTS tunnel_sessions_status ON tunnel_sessions(status);
+
+    CREATE TABLE IF NOT EXISTS remote_settings (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+    ) STRICT;
+
+    INSERT OR IGNORE INTO remote_settings (singleton, enabled) VALUES (1, 0);
+
+    CREATE TABLE IF NOT EXISTS remote_devices (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      token_hash TEXT NOT NULL
+    ) STRICT;
   `);
   const profileColumns = database.prepare("PRAGMA table_info(tunnel_profiles)").all() as Array<{ name: string }>;
   if (!profileColumns.some((column) => column.name === "dns_record_id")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN dns_record_id TEXT");
@@ -175,4 +190,72 @@ export function putProfile(state: State, profile: TunnelProfile, session: Tunnel
   state.sessions = state.sessions.filter((item) => item.profileId !== profile.id);
   state.profiles.push(profile);
   state.sessions.push(session);
+}
+
+export type PersistedRemoteDevice = RemoteDevice & { tokenHash: Buffer };
+
+export async function readRemotePersistence(): Promise<{ enabled: boolean; devices: PersistedRemoteDevice[] }> {
+  const database = await openDatabase();
+  try {
+    const setting = database.prepare("SELECT enabled FROM remote_settings WHERE singleton = 1").get() as { enabled: number } | undefined;
+    const rows = database.prepare("SELECT * FROM remote_devices ORDER BY created_at").all() as Row[];
+    return {
+      enabled: setting?.enabled === 1,
+      devices: rows.map((row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        createdAt: String(row.created_at),
+        lastSeenAt: String(row.last_seen_at),
+        tokenHash: Buffer.from(String(row.token_hash), "hex"),
+      })),
+    };
+  } finally {
+    database.close();
+  }
+}
+
+async function mutateRemote(run: (database: Database) => void) {
+  const database = await openDatabase();
+  try {
+    database.exec("BEGIN IMMEDIATE");
+    run(database);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  } finally {
+    database.close();
+  }
+  await notifyStateChanged();
+}
+
+export async function setRemoteEnabled(enabled: boolean) {
+  await mutateRemote((database) => {
+    database.prepare("UPDATE remote_settings SET enabled = ? WHERE singleton = 1").run(enabled ? 1 : 0);
+  });
+}
+
+export async function saveRemoteDevice(device: RemoteDevice, tokenHash: Buffer) {
+  await mutateRemote((database) => {
+    database.prepare(`INSERT INTO remote_devices (id, name, created_at, last_seen_at, token_hash)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen_at = excluded.last_seen_at, token_hash = excluded.token_hash`)
+      .run(device.id, device.name, device.createdAt, device.lastSeenAt, tokenHash.toString("hex"));
+  });
+}
+
+export async function updateRemoteDeviceLastSeen(id: string, lastSeenAt: string) {
+  await mutateRemote((database) => {
+    database.prepare("UPDATE remote_devices SET last_seen_at = ? WHERE id = ?").run(lastSeenAt, id);
+  });
+}
+
+export async function deleteRemoteDevice(id: string) {
+  await mutateRemote((database) => {
+    database.prepare("DELETE FROM remote_devices WHERE id = ?").run(id);
+  });
+}
+
+export async function clearRemoteDevices() {
+  await mutateRemote((database) => database.exec("DELETE FROM remote_devices"));
 }

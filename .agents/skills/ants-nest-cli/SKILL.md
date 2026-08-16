@@ -1,6 +1,6 @@
 ---
 name: ants-nest-cli
-description: Publish and manage local services with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, create a temporary review link, create an intentional named tunnel, inspect active Ants Nest tunnels, retrieve connector logs, or clean up a previously created share.
+description: Publish and manage local services with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, create a temporary review link, create an intentional named tunnel, manage Remote access device pairing and revocation, inspect active Ants Nest tunnels, retrieve connector logs, or clean up a previously created share.
 ---
 
 # Ants Nest CLI
@@ -59,7 +59,22 @@ Parse JSON and return at least:
 - `expiresAt`, when present
 - a brief reminder that the URL is public
 
-Do not expose `tokenFile`, connector tokens, Cloudflare credentials, or pairing credentials in user-facing output.
+Do not expose `tokenFile`, connector tokens, or Cloudflare credentials in user-facing output. A pairing credential may only be displayed when the user explicitly requests a new Remote access device link; treat it as a sensitive, single-use secret.
+
+## Manage Remote access devices
+
+Remote commands talk to the running Electron app so the CLI and UI share one live server, SQLite device registry, and revocation state. If the app is closed, ask the user to open Ants Nest first.
+
+```bash
+ants remote status --json
+ants remote enable --json
+ants remote pair
+ants remote revoke <full-device-id> --json
+ants remote revoke-all --json
+ants remote disable --json
+```
+
+Use `remote pair` only when the user asks to authorize a new device. It prints the complete single-use URL and a terminal QR code; generating another pairing invalidates the prior unclaimed pairing code but does not revoke existing devices. Use the full device ID returned by `remote status --json` when revoking one browser.
 
 ## Inspect and troubleshoot
 
@@ -90,4 +105,4 @@ Quick shares also clean themselves up at expiration through a detached watchdog.
 - Never pass, print, or persist a Cloudflare API token.
 - Never use `--api-token` in automation. If explicitly authorized to configure, prefer environment variables or `--api-token-stdin`.
 - Never attempt to replace an occupied hostname. Ants Nest deliberately has no override flag.
-- Do not bypass the CLI suffix rules; arbitrary hostnames belong to the human-facing Electron or paired-phone UI.
+- Do not bypass the CLI suffix rules; arbitrary hostnames belong to the human-facing Electron or authorized Remote access UI.

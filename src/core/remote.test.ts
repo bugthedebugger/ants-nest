@@ -2,10 +2,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { newRemotePairing, revokeRemoteDevice, startRemoteAccess, stopRemoteAccess } from "./remote";
+import { newRemotePairing, remoteStatus, restoreRemoteAccess, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "./remote";
+import { startStateChangeServer } from "./change-events";
 
 let directory = "";
 let dnsCreated = false;
+let tunnelCreateCount = 0;
 const nativeFetch = globalThis.fetch;
 
 function success(result: unknown) {
@@ -31,10 +33,11 @@ setInterval(() => {}, 1000);
     proxyDomain: "tunnels.example.com", zoneId: "a".repeat(32), accountId: "b".repeat(32), apiToken: "test_api_token_that_is_long_enough",
   }), { mode: 0o600 });
   dnsCreated = false;
+  tunnelCreateCount = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url.startsWith("http://127.0.0.1:")) return nativeFetch(url, init);
     if (url.includes("dns_records?name=")) return success(dnsCreated ? [{ id: "dns-id", type: "CNAME", content: "tunnel-uuid.cfargotunnel.com", comment: "Managed by Ants Nest" }] : []);
-    if (url.endsWith("/cfd_tunnel") && init?.method === "POST") return success({ id: "tunnel-uuid", token: "connector-token" });
+    if (url.endsWith("/cfd_tunnel") && init?.method === "POST") { tunnelCreateCount += 1; return success({ id: "tunnel-uuid", token: "connector-token" }); }
     if (url.endsWith("/configurations") && init?.method === "PUT") return success({});
     if (url.endsWith("/dns_records") && init?.method === "POST") { dnsCreated = true; return success({ id: "dns-id" }); }
     if (init?.method === "DELETE") { if (url.includes("/dns_records/")) dnsCreated = false; return success({}); }
@@ -62,6 +65,8 @@ describe("remote access server", () => {
     expect(unauthorized.status).toBe(401);
 
     const pairingToken = new URLSearchParams(new URL(state.pairingUrl!).hash.slice(1)).get("pair");
+    let stateChanges = 0;
+    const stopStateEvents = await startStateChangeServer(() => { stateChanges += 1; });
     const paired = await fetch(`${state.localUrl}/api/auth/pair`, {
       method: "POST",
       headers: { Authorization: `Pairing ${pairingToken}`, "Content-Type": "application/json" },
@@ -69,6 +74,8 @@ describe("remote access server", () => {
     });
     expect(paired.status).toBe(201);
     const credentials = await paired.json() as { token: string; device: { id: string } };
+    expect(stateChanges).toBe(1);
+    expect(remoteStatus().devices.map((device) => device.id)).toEqual([credentials.device.id]);
 
     const reused = await fetch(`${state.localUrl}/api/auth/pair`, { method: "POST", headers: { Authorization: `Pairing ${pairingToken}` } });
     expect(reused.status).toBe(401);
@@ -77,18 +84,45 @@ describe("remote access server", () => {
     expect(authorized.status).toBe(200);
     expect(await authorized.json()).toEqual([]);
 
+    const secondPairing = newRemotePairing();
+    const secondPairingToken = new URLSearchParams(new URL(secondPairing.pairingUrl!).hash.slice(1)).get("pair");
+    const pairedSecond = await fetch(`${state.localUrl}/api/auth/pair`, {
+      method: "POST",
+      headers: { Authorization: `Pairing ${secondPairingToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Second phone" }),
+    });
+    expect(pairedSecond.status).toBe(201);
+    const secondCredentials = await pairedSecond.json() as { token: string; device: { id: string } };
+    expect(secondCredentials.token).not.toBe(credentials.token);
+    expect(remoteStatus().devices).toHaveLength(2);
+
     const pendingPairing = newRemotePairing();
     const pendingToken = new URLSearchParams(new URL(pendingPairing.pairingUrl!).hash.slice(1)).get("pair");
-    const afterRevoke = revokeRemoteDevice(credentials.device.id);
-    expect(afterRevoke.devices).toEqual([]);
+    const afterRevoke = await revokeRemoteDevice(credentials.device.id);
+    expect(afterRevoke.devices.map((device) => device.id)).toEqual([secondCredentials.device.id]);
     const revoked = await fetch(`${state.localUrl}/api/tunnels`, { headers: { Authorization: `Bearer ${credentials.token}` } });
     expect(revoked.status).toBe(401);
+    const secondStillAuthorized = await fetch(`${state.localUrl}/api/tunnels`, { headers: { Authorization: `Bearer ${secondCredentials.token}` } });
+    expect(secondStillAuthorized.status).toBe(200);
     const invalidatedPairing = await fetch(`${state.localUrl}/api/auth/pair`, { method: "POST", headers: { Authorization: `Pairing ${pendingToken}` } });
     expect(invalidatedPairing.status).toBe(401);
     expect(newRemotePairing().pairingUrl).not.toBe(pendingPairing.pairingUrl);
 
-    const page = await fetch(state.localUrl!).then((response) => response.text());
+    await shutdownRemoteAccess();
+    const restored = await restoreRemoteAccess();
+    expect(restored.enabled).toBe(true);
+    expect(tunnelCreateCount).toBe(1);
+    expect(restored.pairingUrl).toBeUndefined();
+    expect(restored.devices.map((device) => device.id)).toEqual([secondCredentials.device.id]);
+    const authorizedAfterRestart = await fetch(`${restored.localUrl}/api/tunnels`, { headers: { Authorization: `Bearer ${secondCredentials.token}` } });
+    expect(authorizedAfterRestart.status).toBe(200);
+
+    const page = await fetch(restored.localUrl!).then((response) => response.text());
     expect(page).toContain("Tunnels from anywhere");
+    expect(page).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
+    expect(page).toContain("history.scrollRestoration='manual'");
+    expect(page).toContain("window.open(b.dataset.open,'_blank','noopener,noreferrer')");
     expect(page).not.toContain(pairingToken);
+    await stopStateEvents();
   }, 10_000);
 });

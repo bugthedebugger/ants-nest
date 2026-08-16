@@ -14,6 +14,10 @@ function view(profile: TunnelProfile, session?: TunnelSession): TunnelView {
   return { ...profile, profileId: profile.id, status: "stopped", ...session };
 }
 
+export function isRemoteTunnel(tunnel: Pick<TunnelProfile, "tunnelName">) {
+  return tunnel.tunnelName?.startsWith("antsnest-") ?? false;
+}
+
 function locate(state: State, idOrName: string) {
   const matches = state.profiles.filter((item) => item.id === idOrName || item.id.startsWith(idOrName) || item.name === idOrName || item.tunnelName === idOrName);
   if (matches.length > 1) throw new Error(`Tunnel reference is ambiguous: ${idOrName}`);
@@ -85,7 +89,9 @@ export async function createDesktopQuick(input: DesktopQuickInput): Promise<Tunn
 }
 
 export async function createQuickWithHostname(input: QuickInput, hostnameMode: "quickshare" | "remote" | "desktop" = "quickshare", requestedHostname?: string): Promise<TunnelView> {
-  const parsed = quickInputSchema.parse(input);
+  // Agent and desktop quick shares must expire. Remote access is a durable,
+  // reserved system route whose authorization is controlled per device.
+  const parsed = hostnameMode === "remote" ? namedInputSchema.parse(input) : quickInputSchema.parse(input);
   const status = await doctor();
   if (!status.installed) throw new Error("cloudflared is not installed");
   if (!status.authenticated || !status.proxyDomain) throw new Error("Complete Cloudflare Setup before creating a share");
@@ -205,6 +211,37 @@ export async function stopTunnel(idOrName: string): Promise<TunnelView> {
     return { ...target };
   });
   return view(profile, stopped);
+}
+
+export async function pauseTunnel(idOrName: string): Promise<TunnelView> {
+  const state = await readState();
+  const { profile, session } = locate(state, idOrName);
+  await stopProcess(session?.pid);
+  const stopped = await updateState((current) => {
+    const target = current.sessions.find((item) => item.profileId === profile.id) || { profileId: profile.id, status: "stopped" as const };
+    target.status = "stopped";
+    target.stoppedAt = new Date().toISOString();
+    delete target.pid;
+    delete target.expiresAt;
+    delete target.error;
+    if (!current.sessions.includes(target)) current.sessions.push(target);
+    return { ...target };
+  });
+  return view(profile, stopped);
+}
+
+export async function findRemoteTunnel(): Promise<TunnelView | undefined> {
+  return (await listTunnels()).find(isRemoteTunnel);
+}
+
+export async function resumeRemoteTunnel(id: string): Promise<TunnelView> {
+  await updateState((state) => {
+    const { profile, session } = locate(state, id);
+    delete profile.expiresInSeconds;
+    delete profile.fixedExpiresAt;
+    if (session) delete session.expiresAt;
+  });
+  return startTunnel(id);
 }
 
 export async function expireTunnel(idOrName: string, expectedExpiresAt: string): Promise<boolean> {

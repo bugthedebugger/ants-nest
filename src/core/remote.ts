@@ -1,10 +1,11 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { createDesktopQuick, createQuickWithHostname, listTunnels, removeTunnel, startTunnel, stopTunnel } from "./manager";
+import { createDesktopQuick, createQuickWithHostname, findRemoteTunnel, listTunnels, pauseTunnel, resumeRemoteTunnel, startTunnel, stopTunnel } from "./manager";
 import { remotePage } from "./remote-page";
+import { clearRemoteDevices, deleteRemoteDevice, readRemotePersistence, saveRemoteDevice, setRemoteEnabled, updateRemoteDeviceLastSeen } from "./store";
 import type { RemoteAccessState, RemoteDevice } from "../shared/types";
 
-type DeviceRecord = RemoteDevice & { tokenHash: Buffer };
+type DeviceRecord = RemoteDevice & { tokenHash: Buffer; persistedLastSeenAt: string };
 type ActiveRemote = {
   server: http.Server;
   tunnelId: string;
@@ -13,7 +14,6 @@ type ActiveRemote = {
   startedAt: string;
   pairingTokenHash?: Buffer;
   pairingUrl?: string;
-  expiryTimer?: NodeJS.Timeout;
   devices: Map<string, DeviceRecord>;
 };
 let active: ActiveRemote | undefined;
@@ -39,7 +39,12 @@ function authorizedDevice(request: IncomingMessage, runtime: ActiveRemote): Devi
   const supplied = createHash("sha256").update(token).digest();
   for (const device of runtime.devices.values()) {
     if (supplied.length === device.tokenHash.length && timingSafeEqual(supplied, device.tokenHash)) {
-      device.lastSeenAt = new Date().toISOString();
+      const now = new Date().toISOString();
+      device.lastSeenAt = now;
+      if (Date.now() - new Date(device.persistedLastSeenAt).getTime() > 60_000) {
+        device.persistedLastSeenAt = now;
+        void updateRemoteDeviceLastSeen(device.id, now).catch(() => undefined);
+      }
       return device;
     }
   }
@@ -88,8 +93,10 @@ function createRemoteServer(runtime: ActiveRemote) {
         const device: DeviceRecord = {
           id: randomUUID(), name: cleanDeviceName(input.name), createdAt: now, lastSeenAt: now,
           tokenHash: createHash("sha256").update(token).digest(),
+          persistedLastSeenAt: now,
         };
         runtime.devices.set(device.id, device);
+        await saveRemoteDevice(publicDevice(device), device.tokenHash);
         return json(response, 201, { token, device: publicDevice(device) });
       }
       if (!url.pathname.startsWith("/api/") || !authorizedDevice(request, runtime)) return json(response, 401, { error: "This device is not authorized. Scan a new pairing code." });
@@ -110,7 +117,7 @@ function createRemoteServer(runtime: ActiveRemote) {
   });
 }
 
-function publicDevice(device: DeviceRecord): RemoteDevice {
+function publicDevice(device: RemoteDevice): RemoteDevice {
   return { id: device.id, name: device.name, createdAt: device.createdAt, lastSeenAt: device.lastSeenAt };
 }
 
@@ -135,16 +142,17 @@ export function remoteTunnelId(): string | undefined {
 }
 
 export function newRemotePairing(): RemoteAccessState {
-  if (!active) throw new Error("Enable phone access before creating a pairing code");
+  if (!active) throw new Error("Enable remote access before creating a pairing code");
   const token = randomBytes(32).toString("base64url");
   active.pairingTokenHash = createHash("sha256").update(token).digest();
   active.pairingUrl = `${active.publicUrl}/#pair=${token}`;
   return snapshot(active);
 }
 
-export function revokeRemoteDevice(id: string): RemoteAccessState {
-  if (!active) throw new Error("Phone access is not enabled");
+export async function revokeRemoteDevice(id: string): Promise<RemoteAccessState> {
+  if (!active) throw new Error("Remote access is not enabled");
   if (!active.devices.delete(id)) throw new Error("Authorized device not found");
+  await deleteRemoteDevice(id);
   // Revocation also invalidates any unclaimed QR so the removed device cannot
   // use a previously copied pairing link to immediately authorize itself again.
   delete active.pairingTokenHash;
@@ -152,9 +160,10 @@ export function revokeRemoteDevice(id: string): RemoteAccessState {
   return snapshot(active);
 }
 
-export function revokeAllRemoteDevices(): RemoteAccessState {
-  if (!active) throw new Error("Phone access is not enabled");
+export async function revokeAllRemoteDevices(): Promise<RemoteAccessState> {
+  if (!active) throw new Error("Remote access is not enabled");
   active.devices.clear();
+  await clearRemoteDevices();
   delete active.pairingTokenHash;
   delete active.pairingUrl;
   return snapshot(active);
@@ -162,34 +171,48 @@ export function revokeAllRemoteDevices(): RemoteAccessState {
 
 export async function startRemoteAccess(): Promise<RemoteAccessState> {
   if (active) return snapshot(active);
+  const persisted = await readRemotePersistence();
+  const reusableTunnel = await findRemoteTunnel();
+  let listenPort = 0;
+  if (reusableTunnel) {
+    const savedOrigin = new URL(reusableTunnel.origin);
+    if (savedOrigin.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(savedOrigin.hostname) || !savedOrigin.port) {
+      throw new Error("The saved Remote access tunnel has an invalid local origin");
+    }
+    listenPort = Number(savedOrigin.port);
+  }
   const runtime: ActiveRemote = {
     server: undefined as unknown as http.Server,
     tunnelId: "",
     localUrl: "",
     publicUrl: "",
     startedAt: new Date().toISOString(),
-    devices: new Map<string, DeviceRecord>(),
+    devices: new Map(persisted.devices.map((device) => [device.id, { ...device, persistedLastSeenAt: device.lastSeenAt }])),
   };
   const server = createRemoteServer(runtime);
   runtime.server = server;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(listenPort, "127.0.0.1", () => resolve());
   });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Could not determine the remote control port");
   runtime.localUrl = `http://127.0.0.1:${address.port}`;
+  let createdTunnelId: string | undefined;
   try {
-    const tunnel = await createQuickWithHostname({ name: "Phone control", description: "Secure remote dashboard for controlling Ants Nest from authorized devices", origin: runtime.localUrl, expiresInSeconds: 86_400 }, "remote");
+    const tunnel = reusableTunnel
+      ? await resumeRemoteTunnel(reusableTunnel.id)
+      : await createQuickWithHostname({ name: "Remote access", description: "Secure remote dashboard for controlling Ants Nest from authorized devices", origin: runtime.localUrl }, "remote");
     if (!tunnel.publicUrl) throw new Error("Cloudflare did not return a remote control URL");
+    if (!reusableTunnel) createdTunnelId = tunnel.id;
     runtime.tunnelId = tunnel.id;
     runtime.publicUrl = tunnel.publicUrl;
     active = runtime;
-    runtime.expiryTimer = setTimeout(() => void stopRemoteAccess(), 86_400_000);
-    runtime.expiryTimer.unref();
-    return newRemotePairing();
+    await setRemoteEnabled(true);
+    return runtime.devices.size ? snapshot(runtime) : newRemotePairing();
   } catch (error) {
-    server.close();
+    if (createdTunnelId) await stopTunnel(createdTunnelId).catch(() => undefined);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     throw error;
   }
 }
@@ -198,11 +221,27 @@ export async function stopRemoteAccess(): Promise<RemoteAccessState> {
   const current = active;
   if (!current) return { enabled: false, devices: [] };
   active = undefined;
-  if (current.expiryTimer) clearTimeout(current.expiryTimer);
   current.devices.clear();
   delete current.pairingTokenHash;
+  await setRemoteEnabled(false);
+  await clearRemoteDevices();
   await stopTunnel(current.tunnelId).catch(() => undefined);
-  await removeTunnel(current.tunnelId).catch(() => undefined);
   await new Promise<void>((resolve) => current.server.close(() => resolve()));
   return { enabled: false, devices: [] };
+}
+
+export async function shutdownRemoteAccess(): Promise<void> {
+  const current = active;
+  if (!current) return;
+  active = undefined;
+  delete current.pairingTokenHash;
+  delete current.pairingUrl;
+  await pauseTunnel(current.tunnelId).catch(() => undefined);
+  await new Promise<void>((resolve) => current.server.close(() => resolve()));
+}
+
+export async function restoreRemoteAccess(): Promise<RemoteAccessState> {
+  const persisted = await readRemotePersistence();
+  const reusableTunnel = await findRemoteTunnel();
+  return persisted.enabled || reusableTunnel ? startRemoteAccess() : { enabled: false, devices: persisted.devices.map(publicDevice) };
 }
