@@ -10,7 +10,7 @@ async function main() {
   if (operation === "install") {
     status = await installCli({ mode: "repository", nodePath: process.execPath, scriptPath: path.resolve("dist/cli/index.cjs"), version: packageMetadata.version });
   } else if (operation === "install-all") {
-    const appImage = path.resolve("release", `Ants Nest-${packageMetadata.version}.AppImage`);
+    const appImage = path.resolve("release", `Ants.Nest-${packageMetadata.version}.AppImage`);
     status = await installCli({ mode: "appimage", executablePath: appImage, fontconfigPath: path.resolve("assets/fontconfig-cli.conf"), version: packageMetadata.version });
     status = await installDesktopApp(path.resolve("assets/icon.png"));
   } else if (operation === "uninstall-all") status = await uninstallAll();
