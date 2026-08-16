@@ -206,3 +206,7 @@ npm run build
 ```
 
 The architecture follows the useful boundaries demonstrated by [T3 Code](https://github.com/pingdotgg/t3code): an Electron host, isolated renderer bridge, reusable core services, typed contracts, a first-class CLI, and local ownership of credentials and data.
+
+## License
+
+Ants Nest is available under the [MIT License](LICENSE).
