@@ -10,16 +10,27 @@ case "$mode" in
   *) echo "Usage: install.sh [--cli-only|--all]" >&2; exit 2 ;;
 esac
 
-if [ "$(uname -s)" != "Linux" ]; then
-  echo "Ants Nest automatic installation currently supports Linux." >&2
+operating_system="$(uname -s)"
+case "$operating_system" in
+  Linux|Darwin) ;;
+  *) echo "Use install.ps1 to install Ants Nest CLI on Windows." >&2; exit 1 ;;
+esac
+if [ "$mode" = "--all" ]; then
+  [ "$operating_system" = "Linux" ] || { echo "Desktop + CLI installation currently requires Linux. Use --cli-only on macOS." >&2; exit 1; }
+  case "$(uname -m)" in
+    x86_64|amd64) ;;
+    *) echo "The published AppImage currently supports Linux x86_64 only." >&2; exit 1 ;;
+  esac
+fi
+command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
+if command -v sha256sum >/dev/null 2>&1; then
+  calculate_sha256() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+  calculate_sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  echo "sha256sum or shasum is required." >&2
   exit 1
 fi
-case "$(uname -m)" in
-  x86_64|amd64) ;;
-  *) echo "The published Ants Nest artifacts currently support Linux x86_64 only." >&2; exit 1 ;;
-esac
-command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
-command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required." >&2; exit 1; }
 
 home_directory="${HOME:?HOME is required}"
 bin_directory="$home_directory/.local/bin"
@@ -77,7 +88,7 @@ download_verified() {
     sha256:*) expected_digest="${asset_digest#sha256:}" ;;
     *) echo "GitHub did not provide a SHA-256 digest for $asset_name; refusing installation." >&2; exit 1 ;;
   esac
-  actual_digest="$(sha256sum "$destination" | awk '{print $1}')"
+  actual_digest="$(calculate_sha256 "$destination")"
   [ "$actual_digest" = "$expected_digest" ] || { echo "SHA-256 verification failed for $asset_name." >&2; exit 1; }
 }
 

@@ -97,8 +97,9 @@ async function stopLocalServers() {
 
 async function desktopCliInstallationStatus() {
   const status = await cliInstallationStatus();
-  if (status.installed || process.env.APPIMAGE) return status;
-  return { ...status, supported: false, reason: "Open the packaged Linux AppImage to install the CLI, or run npm run install:cli from the repository." };
+  const packagedInstallerAvailable = process.platform === "linux" ? Boolean(process.env.APPIMAGE) : app.isPackaged;
+  if (status.installed || packagedInstallerAvailable) return status;
+  return { ...status, supported: false, reason: "Open the packaged desktop app to install the CLI, or run npm run install:cli from the repository." };
 }
 
 function registerIpc() {
@@ -122,9 +123,13 @@ function registerIpc() {
   ipcMain.handle("ants:revoke-all-remote-devices", () => revokeAllRemoteDevices());
   ipcMain.handle("ants:cli-installation-status", () => desktopCliInstallationStatus());
   ipcMain.handle("ants:install-cli", () => {
-    const appImage = process.env.APPIMAGE;
-    if (!appImage) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
-    return installCli({ mode: "appimage", executablePath: appImage, fontconfigPath: path.join(process.resourcesPath, "fontconfig-cli.conf"), version: app.getVersion() });
+    if (process.platform === "linux") {
+      const appImage = process.env.APPIMAGE;
+      if (!appImage) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
+      return installCli({ mode: "appimage", executablePath: appImage, fontconfigPath: path.join(process.resourcesPath, "fontconfig-cli.conf"), version: app.getVersion() });
+    }
+    if (!app.isPackaged) throw new Error("Open the packaged desktop app, or run npm run install:cli from the repository");
+    return installCli({ mode: "desktop", executablePath: process.execPath, version: app.getVersion() });
   });
   ipcMain.handle("ants:uninstall-cli", () => uninstallCli());
   ipcMain.handle("ants:open-external", async (_event, rawUrl: unknown) => {

@@ -46,15 +46,22 @@ case "$url" in
   *) echo "Unexpected URL: $url" >&2; exit 1;;
 esac
 `, { mode: 0o755 });
+  await fs.writeFile(path.join(mockBin, "uname"), `#!/bin/sh
+case "$1" in
+  -s) printf '%s\n' "\${MOCK_UNAME_S:-Linux}" ;;
+  -m) printf '%s\n' "\${MOCK_UNAME_M:-x86_64}" ;;
+  *) printf '%s\n' "\${MOCK_UNAME_S:-Linux}" ;;
+esac
+`, { mode: 0o755 });
 });
 
 afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }); });
 
-function install(mode: "--cli-only" | "--all") {
-  const home = path.join(directory, mode.slice(2));
+function install(mode: "--cli-only" | "--all", operatingSystem = "Linux") {
+  const home = path.join(directory, `${operatingSystem}-${mode.slice(2)}`);
   const result = spawnSync("sh", [path.resolve("install.sh"), mode], {
     encoding: "utf8",
-    env: { ...process.env, HOME: home, XDG_DATA_HOME: path.join(home, ".local", "share"), FIXTURE_DIRECTORY: path.join(directory, "fixture"), PATH: `${path.join(directory, "mock-bin")}:${process.env.PATH}` },
+    env: { ...process.env, HOME: home, XDG_DATA_HOME: path.join(home, ".local", "share"), FIXTURE_DIRECTORY: path.join(directory, "fixture"), MOCK_UNAME_S: operatingSystem, PATH: `${path.join(directory, "mock-bin")}:${process.env.PATH}` },
   });
   expect(result.stderr).toBe("");
   expect(result.status, result.stdout).toBe(0);
@@ -70,6 +77,13 @@ describe("curl installer", () => {
     await expect(fs.access(path.join(home, ".local", "share", "applications", "ants-nest.desktop"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("installs the same standalone CLI on macOS", async () => {
+    const home = install("--cli-only", "Darwin");
+    const launcher = path.join(home, ".local", "bin", "ants-nest");
+    expect(await fs.readFile(launcher, "utf8")).toContain("mode=repository version=1.2.3");
+    expect(spawnSync(launcher, [], { encoding: "utf8" }).stdout.trim()).toBe("test cli 1.2.3");
+  });
+
   it("installs the AppImage, CLI launchers, icon, and desktop entry", async () => {
     const home = install("--all");
     const launcher = path.join(home, ".local", "bin", "ants-nest");
@@ -77,5 +91,18 @@ describe("curl installer", () => {
     expect(spawnSync(launcher, ["--version"], { encoding: "utf8" }).stdout.trim()).toBe("test app cli 1.2.3");
     const desktop = await fs.readFile(path.join(home, ".local", "share", "applications", "ants-nest.desktop"), "utf8");
     expect(desktop).toContain("Name=Ants Nest");
+  });
+});
+
+describe("PowerShell installer", () => {
+  it("verifies the release and installs protected native commands on the user PATH", async () => {
+    const script = await fs.readFile(path.resolve("install.ps1"), "utf8");
+    expect(script).toContain("Node.js 22 or newer");
+    expect(script).toContain("Get-FileHash -Path $temporary -Algorithm SHA256");
+    expect(script).toContain("does not contain ants-nest-cli.cjs");
+    expect(script).toContain("is not managed by Ants Nest");
+    expect(script).toContain('Join-Path $binDirectory "ants.cmd"');
+    expect(script).toContain('Join-Path $binDirectory "ants-nest.cmd"');
+    expect(script).toContain('[Environment]::SetEnvironmentVariable("Path", $newPath, "User")');
   });
 });
