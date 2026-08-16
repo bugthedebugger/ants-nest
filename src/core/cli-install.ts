@@ -6,7 +6,7 @@ import type { CliInstallationStatus } from "../shared/types";
 const managedMarker = "# Managed by Ants Nest CLI installer";
 
 export type CliInstallTarget =
-  | { mode: "appimage"; executablePath: string; version: string }
+  | { mode: "appimage"; executablePath: string; fontconfigPath: string; version: string }
   | { mode: "repository"; nodePath: string; scriptPath: string; version: string };
 
 type CliInstallOptions = {
@@ -23,6 +23,7 @@ function locations(homeDirectory = os.homedir()) {
     binDirectory,
     appDirectory,
     appImage: path.join(appDirectory, "Ants Nest.AppImage"),
+    fontconfig: path.join(appDirectory, "fontconfig-cli.conf"),
     icon: path.join(appDirectory, "icon.png"),
     desktopEntry: path.join(applicationsDirectory, "ants-nest.desktop"),
     applicationsDirectory,
@@ -42,7 +43,8 @@ function launcherScript(target: CliInstallTarget, appImage: string) {
   const command = target.mode === "appimage"
     ? `${shellQuote(appImage)} --cli`
     : `${shellQuote(target.nodePath)} ${shellQuote(target.scriptPath)}`;
-  return `#!/bin/sh\n${managedMarker}\n${launcherMetadata(target)}\nunset ELECTRON_RUN_AS_NODE\nexec ${command} "$@"\n`;
+  const environment = target.mode === "appimage" ? `export FONTCONFIG_FILE=${shellQuote(path.join(path.dirname(appImage), "fontconfig-cli.conf"))}\n` : "";
+  return `#!/bin/sh\n${managedMarker}\n${launcherMetadata(target)}\nunset ELECTRON_RUN_AS_NODE\n${environment}exec ${command} "$@"\n`;
 }
 
 async function readLauncher(file: string) {
@@ -131,9 +133,12 @@ export async function installCli(target: CliInstallTarget, options: CliInstallOp
   await fs.mkdir(destination.binDirectory, { recursive: true, mode: 0o700 });
   if (target.mode === "appimage") {
     const source = path.resolve(target.executablePath);
-    await fs.access(source);
+    await Promise.all([fs.access(source), fs.access(target.fontconfigPath)]);
     await fs.mkdir(destination.appDirectory, { recursive: true, mode: 0o700 });
-    await atomicCopy(source, destination.appImage);
+    await Promise.all([
+      atomicCopy(source, destination.appImage),
+      atomicCopy(target.fontconfigPath, destination.fontconfig, 0o600),
+    ]);
   } else {
     await Promise.all([fs.access(target.nodePath), fs.access(target.scriptPath)]);
   }
@@ -150,6 +155,7 @@ export async function uninstallCli(options: CliInstallOptions = {}): Promise<Cli
   const desktopEntry = await readLauncher(destination.desktopEntry);
   if (!desktopEntry?.includes(managedMarker)) {
     await fs.rm(destination.appImage, { force: true }).catch(() => undefined);
+    await fs.rm(destination.fontconfig, { force: true }).catch(() => undefined);
     await fs.rmdir(destination.appDirectory).catch(() => undefined);
   }
   return cliInstallationStatus(options);
@@ -163,7 +169,7 @@ export async function uninstallAll(options: CliInstallOptions = {}): Promise<Cli
   }
   await uninstallCli(options);
   if (desktopEntry?.includes(managedMarker)) await fs.rm(destination.desktopEntry, { force: true });
-  await Promise.all([fs.rm(destination.appImage, { force: true }), fs.rm(destination.icon, { force: true })]);
+  await Promise.all([fs.rm(destination.appImage, { force: true }), fs.rm(destination.fontconfig, { force: true }), fs.rm(destination.icon, { force: true })]);
   await fs.rmdir(destination.appDirectory).catch(() => undefined);
   return cliInstallationStatus(options);
 }

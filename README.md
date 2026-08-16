@@ -175,6 +175,8 @@ See [.agents/skills/ants-nest-cli/SKILL.md](.agents/skills/ants-nest-cli/SKILL.m
 
 Select **Enable remote access** in Electron to create `antsnest.<domain>` and a single-use pairing QR code. Each paired browser exchanges that code for its own random device token. The desktop app lists authorized devices and can revoke one browser or all browsers at any time.
 
+Once enabled, Remote access runs as a lightweight background service: closing the desktop window does not take the URL offline, and opening Ants Nest again reconnects to the same service. Ants Nest also installs a user-login autostart entry while Remote access is enabled so the dashboard returns after a logout or reboot. Disabling Remote access removes that entry, releases the hostname, and lets the background process exit.
+
 The running desktop app can also create and revoke device access through the CLI:
 
 ```bash
@@ -186,7 +188,7 @@ ants remote revoke-all
 ants remote disable
 ```
 
-`ants remote pair` prints the complete one-time pairing URL and a terminal QR code. The Electron app must be running because it owns the local Remote access server. Use `--json` for machine-readable state; pairing JSON includes both `pairingUrl` and the rendered `qr` string.
+`ants remote pair` prints the complete one-time pairing URL and a terminal QR code. The Ants Nest background service must be active because it owns the local Remote access server; it remains active after the window closes while Remote access is enabled. Use `--json` for machine-readable state; pairing JSON includes both `pairingUrl` and the rendered `qr` string.
 
 Pairing credentials live in the URL fragment and are not sent in HTTP requests. The remote server binds to `127.0.0.1`, rejects unauthenticated API calls, compares token hashes in constant time, limits request bodies, and does not enable cross-origin access. Ending Remote access removes the public route and invalidates every device.
 
@@ -199,6 +201,8 @@ Ants Nest stores runtime data under `~/.ants-nest` by default:
 - `tokens/` — individual connector tokens
 - `logs/` — connector logs
 - `bin/` — verified managed `cloudflared` installation
+
+On Linux, enabled Remote access also creates the managed autostart entry `~/.config/autostart/ants-nest-remote.desktop`.
 
 Override the directory with `ANTS_NEST_HOME` or the executable with `CLOUDFLARED_BIN`. The four `CLOUDFLARE_*` environment variables take precedence over saved setup values.
 

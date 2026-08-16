@@ -12,14 +12,18 @@ afterEach(async () => { await fs.rm(directory, { recursive: true, force: true })
 describe("CLI installer", () => {
   it("installs AppImage-backed commands and removes only managed files", async () => {
     const source = path.join(directory, "downloaded.AppImage");
+    const fontconfig = path.join(directory, "fontconfig-cli.conf");
     await fs.writeFile(source, "fake appimage", { mode: 0o755 });
+    await fs.writeFile(fontconfig, "<fontconfig/>");
     const options = { homeDirectory: path.join(directory, "home"), platform: "linux" as const, pathValue: path.join(directory, "home", ".local", "bin") };
-    const installed = await installCli({ mode: "appimage", executablePath: source, version: "1.2.3" }, options);
+    const installed = await installCli({ mode: "appimage", executablePath: source, fontconfigPath: fontconfig, version: "1.2.3" }, options);
     expect(installed).toMatchObject({ installed: true, onPath: true, mode: "appimage", version: "1.2.3" });
     const launcher = await fs.readFile(path.join(options.homeDirectory, ".local", "bin", "ants"), "utf8");
     expect(launcher).toContain("Ants Nest.AppImage' --cli");
+    expect(launcher).toContain("export FONTCONFIG_FILE=");
     expect((await fs.stat(path.join(options.homeDirectory, ".local", "bin", "ants"))).mode & 0o777).toBe(0o755);
     expect(await fs.readFile(path.join(options.homeDirectory, ".local", "share", "ants-nest", "Ants Nest.AppImage"), "utf8")).toBe("fake appimage");
+    expect(await fs.readFile(path.join(options.homeDirectory, ".local", "share", "ants-nest", "fontconfig-cli.conf"), "utf8")).toBe("<fontconfig/>");
     const icon = path.join(directory, "icon.png");
     await fs.writeFile(icon, "fake icon");
     expect((await installDesktopApp(icon, options)).appInstalled).toBe(true);

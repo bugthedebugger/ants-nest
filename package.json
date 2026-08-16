@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Ants Nest contributors",
   "license": "MIT",
@@ -63,6 +63,12 @@
     "files": [
       "dist/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/fontconfig-cli.conf",
+        "to": "fontconfig-cli.conf"
+      }
     ],
     "linux": {
       "target": [

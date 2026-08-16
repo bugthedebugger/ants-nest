@@ -29,6 +29,7 @@ applications_directory="$data_home/applications"
 app_image="$app_directory/Ants Nest.AppImage"
 cli_script="$app_directory/cli.cjs"
 icon_file="$app_directory/icon.png"
+fontconfig_file="$app_directory/fontconfig-cli.conf"
 desktop_entry="$applications_directory/ants-nest.desktop"
 temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/ants-nest-install.XXXXXX")"
 trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
@@ -106,12 +107,21 @@ else
   download_verified "ants-nest-icon.png" "$temporary_directory/icon.png"
   install -m 755 "$temporary_directory/Ants-Nest.AppImage" "$app_image"
   install -m 644 "$temporary_directory/icon.png" "$icon_file"
+  cat > "$temporary_directory/fontconfig-cli.conf" <<'EOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <cachedir prefix="xdg">ants-nest/fontconfig</cachedir>
+</fontconfig>
+EOF
+  install -m 600 "$temporary_directory/fontconfig-cli.conf" "$fontconfig_file"
   for launcher in "$bin_directory/ants" "$bin_directory/ants-nest"; do
     cat > "$temporary_directory/launcher" <<EOF
 #!/bin/sh
 $marker
 # ants-nest-cli mode=appimage version=$version
 unset ELECTRON_RUN_AS_NODE
+export FONTCONFIG_FILE="$fontconfig_file"
 exec "$app_image" --cli "\$@"
 EOF
     install -m 755 "$temporary_directory/launcher" "$launcher"

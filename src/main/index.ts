@@ -6,6 +6,7 @@ import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, re
 import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
 import { cliInstallationStatus, installCli, uninstallCli } from "../core/cli-install";
+import { setRemoteAutostart } from "../core/autostart";
 
 const cliArgumentIndex = process.argv.indexOf("--cli");
 if (cliArgumentIndex >= 0) {
@@ -19,12 +20,18 @@ let mainWindow: BrowserWindow | undefined;
 let stopStateChangeServer: (() => Promise<void>) | undefined;
 let stopAppControlServer: (() => Promise<void>) | undefined;
 let appControlQueue = Promise.resolve();
+const backgroundLaunch = process.argv.includes("--background");
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) app.quit();
-app.on("second-instance", () => {
-  const window = mainWindow;
-  if (!window || window.isDestroyed()) return;
+app.on("second-instance", (_event, argv) => {
+  if (argv.includes("--background")) return;
+  let window = mainWindow;
+  if (!window || window.isDestroyed()) {
+    createWindow();
+    window = mainWindow;
+  }
+  if (!window) return;
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -47,14 +54,35 @@ async function performAppControl(request: AppControlRequest): Promise<RemoteAcce
   let result: RemoteAccessState;
   switch (request.operation) {
     case "remote-status": result = remoteStatus(); break;
-    case "remote-enable": result = await startRemoteAccess(); break;
+    case "remote-enable": result = await startRemoteAccess(); await configureRemoteAutostart(true); break;
     case "remote-pair": result = newRemotePairing(); break;
     case "remote-revoke": result = await revokeRemoteDevice(request.deviceId); break;
     case "remote-revoke-all": result = await revokeAllRemoteDevices(); break;
-    case "remote-disable": result = await stopRemoteAccess(); break;
+    case "remote-disable": result = await stopRemoteAccess(); await configureRemoteAutostart(false); break;
   }
   if (request.operation !== "remote-status") notifyRendererStateChanged();
+  if (request.operation === "remote-disable" && BrowserWindow.getAllWindows().length === 0) {
+    const timer = setTimeout(() => app.quit(), 250);
+    timer.unref();
+  }
   return result;
+}
+
+async function configureRemoteAutostart(enabled: boolean) {
+  if (process.platform === "linux") await setRemoteAutostart(enabled, process.env.APPIMAGE);
+  else app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ["--background"] : [] });
+}
+
+async function enableRemoteAccess() {
+  const state = await startRemoteAccess();
+  await configureRemoteAutostart(true);
+  return state;
+}
+
+async function disableRemoteAccess() {
+  const state = await stopRemoteAccess();
+  await configureRemoteAutostart(false);
+  return state;
 }
 
 function handleAppControl(request: AppControlRequest): Promise<RemoteAccessState> {
@@ -87,8 +115,8 @@ function registerIpc() {
   ipcMain.handle("ants:remove", (_event, id: unknown) => removeTunnel(String(id)));
   ipcMain.handle("ants:logs", (_event, id: unknown) => tunnelLogs(String(id)));
   ipcMain.handle("ants:remote-status", () => remoteStatus());
-  ipcMain.handle("ants:start-remote", () => startRemoteAccess());
-  ipcMain.handle("ants:stop-remote", () => stopRemoteAccess());
+  ipcMain.handle("ants:start-remote", () => enableRemoteAccess());
+  ipcMain.handle("ants:stop-remote", () => disableRemoteAccess());
   ipcMain.handle("ants:new-remote-pairing", () => newRemotePairing());
   ipcMain.handle("ants:revoke-remote-device", (_event, id: unknown) => revokeRemoteDevice(String(id)));
   ipcMain.handle("ants:revoke-all-remote-devices", () => revokeAllRemoteDevices());
@@ -96,7 +124,7 @@ function registerIpc() {
   ipcMain.handle("ants:install-cli", () => {
     const appImage = process.env.APPIMAGE;
     if (!appImage) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
-    return installCli({ mode: "appimage", executablePath: appImage, version: app.getVersion() });
+    return installCli({ mode: "appimage", executablePath: appImage, fontconfigPath: path.join(process.resourcesPath, "fontconfig-cli.conf"), version: app.getVersion() });
   });
   ipcMain.handle("ants:uninstall-cli", () => uninstallCli());
   ipcMain.handle("ants:open-external", async (_event, rawUrl: unknown) => {
@@ -144,9 +172,14 @@ app.whenReady().then(async () => {
   stopStateChangeServer = await startStateChangeServer(notifyRendererStateChanged);
   stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();
-  createWindow();
+  if (!backgroundLaunch) createWindow();
   void reconcileExpiryWorkers().catch((error) => console.error("Could not reconcile expiration workers:", error));
-  void restoreRemoteAccess().catch((error) => console.error("Could not restore remote access:", error));
+  void restoreRemoteAccess()
+    .then(async (state) => {
+      await configureRemoteAutostart(state.enabled);
+      if (backgroundLaunch && !state.enabled) app.quit();
+    })
+    .catch((error) => console.error("Could not restore remote access:", error));
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 let quitting = false;
@@ -163,5 +196,8 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   void shutdownRemoteAccess().then(stopLocalServers).finally(() => { quitting = true; app.quit(); });
 });
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("window-all-closed", () => {
+  if (remoteStatus().enabled) return;
+  if (process.platform !== "darwin") app.quit();
+});
 }

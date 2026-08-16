@@ -65,7 +65,7 @@ Do not expose `tokenFile`, connector tokens, or Cloudflare credentials in user-f
 
 ## Manage Remote access devices
 
-Remote commands talk to the running Electron app so the CLI and UI share one live server, SQLite device registry, and revocation state. If the app is closed, ask the user to open Ants Nest first.
+Remote commands talk to the Ants Nest background service so the CLI and UI share one live server, SQLite device registry, and revocation state. Once Remote access is enabled, closing the desktop window leaves this service running and a managed login autostart entry restores it after reboot. If the service was explicitly quit, ask the user to open Ants Nest first.
 
 ```bash
 ants remote status --json
