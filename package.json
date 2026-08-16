@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Ants Nest contributors",
   "license": "MIT",
@@ -20,7 +20,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm:dev:main\"",
     "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
-    "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap",
+    "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap && node scripts/build-standalone-cli.mjs",
     "package": "npm run clean:release && npm run build && electron-builder && node scripts/prepare-release.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root .",
@@ -49,6 +49,7 @@
     "concurrently": "^9.2.0",
     "electron": "^41.5.0",
     "electron-builder": "^26.0.0",
+    "esbuild": "^0.27.7",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.0",
