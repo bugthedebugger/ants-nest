@@ -7,6 +7,7 @@ const api: AntsNestApi = {
     ipcRenderer.on("ants:state-changed", listener);
     return () => ipcRenderer.removeListener("ants:state-changed", listener);
   },
+  appVersion: () => ipcRenderer.invoke("ants:app-version"),
   doctor: () => ipcRenderer.invoke("ants:doctor"),
   configureCloudflare: (input) => ipcRenderer.invoke("ants:configure-cloudflare", input),
   list: () => ipcRenderer.invoke("ants:list"),

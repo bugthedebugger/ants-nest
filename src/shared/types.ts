@@ -113,6 +113,7 @@ export type DesktopNamedInput = z.input<typeof desktopNamedInputSchema>;
 
 export type AntsNestApi = {
   onStateChanged(callback: () => void): () => void;
+  appVersion(): Promise<string>;
   doctor(): Promise<DoctorResult>;
   configureCloudflare(input: CloudflareSetupInput): Promise<DoctorResult>;
   list(): Promise<TunnelView[]>;

@@ -123,6 +123,7 @@ async function syncManagedCliWithDesktop() {
 }
 
 function registerIpc() {
+  ipcMain.handle("ants:app-version", () => app.getVersion());
   ipcMain.handle("ants:doctor", () => doctor());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
   ipcMain.handle("ants:list", async () => {
