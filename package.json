@@ -21,7 +21,7 @@
     "dev": "concurrently -k \"vite\" \"npm:dev:main\"",
     "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
     "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap",
-    "package": "npm run build && electron-builder && node scripts/prepare-release.mjs",
+    "package": "npm run clean:release && npm run build && electron-builder && node scripts/prepare-release.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root .",
     "check": "npm run typecheck && npm test && npm run build",
@@ -29,7 +29,8 @@
     "install:all": "npm run package && node dist/cli/install-runner.cjs install-all",
     "uninstall:cli": "npm run build && node dist/cli/install-runner.cjs uninstall",
     "uninstall:all": "npm run build && node dist/cli/install-runner.cjs uninstall-all",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean:release": "node -e \"require('node:fs').rmSync('release',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -71,6 +72,7 @@
       }
     ],
     "linux": {
+      "artifactName": "Ants.Nest-${version}.${ext}",
       "target": [
         "AppImage"
       ],
