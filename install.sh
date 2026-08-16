@@ -112,8 +112,7 @@ EOF
     install -m 755 "$temporary_directory/launcher" "$launcher"
   done
 else
-  app_asset="$(awk '/"name": "Ants.Nest-.*.AppImage"/ { value=$0; sub(/^.*"name": "/, "", value); sub(/".*$/, "", value); print value; exit }' "$release_json")"
-  [ -n "$app_asset" ] || { echo "The latest release does not contain a Linux AppImage." >&2; exit 1; }
+  app_asset="Ants.Nest.AppImage"
   download_verified "$app_asset" "$temporary_directory/Ants-Nest.AppImage"
   download_verified "ants-nest-icon.png" "$temporary_directory/icon.png"
   install -m 755 "$temporary_directory/Ants-Nest.AppImage" "$app_image"

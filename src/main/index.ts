@@ -5,7 +5,7 @@ import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
-import { cliInstallationStatus, installCli, uninstallCli } from "../core/cli-install";
+import { cliInstallationStatus, installCli, probeDesktopCliVersion, uninstallCli, type CliInstallTarget } from "../core/cli-install";
 import { setRemoteAutostart } from "../core/autostart";
 
 const cliArgumentIndex = process.argv.indexOf("--cli");
@@ -102,6 +102,26 @@ async function desktopCliInstallationStatus() {
   return { ...status, supported: false, reason: "Open the packaged desktop app to install the CLI, or run npm run install:cli from the repository." };
 }
 
+async function packagedCliTarget(): Promise<CliInstallTarget> {
+  if (process.platform === "linux") {
+    const executablePath = process.env.APPIMAGE;
+    if (!executablePath) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
+    const fontconfigPath = path.join(process.resourcesPath, "fontconfig-cli.conf");
+    const version = await probeDesktopCliVersion(executablePath, fontconfigPath);
+    return { mode: "appimage", executablePath, fontconfigPath, version };
+  }
+  if (!app.isPackaged) throw new Error("Open the packaged desktop app, or run npm run install:cli from the repository");
+  return { mode: "desktop", executablePath: process.execPath, version: await probeDesktopCliVersion(process.execPath) };
+}
+
+async function syncManagedCliWithDesktop() {
+  if (!app.isPackaged) return;
+  const status = await cliInstallationStatus();
+  if (!status.installed) return;
+  const target = await packagedCliTarget();
+  if (status.version !== target.version) await installCli(target);
+}
+
 function registerIpc() {
   ipcMain.handle("ants:doctor", () => doctor());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
@@ -123,13 +143,7 @@ function registerIpc() {
   ipcMain.handle("ants:revoke-all-remote-devices", () => revokeAllRemoteDevices());
   ipcMain.handle("ants:cli-installation-status", () => desktopCliInstallationStatus());
   ipcMain.handle("ants:install-cli", () => {
-    if (process.platform === "linux") {
-      const appImage = process.env.APPIMAGE;
-      if (!appImage) throw new Error("Install CLI from the packaged Linux AppImage, or run npm run install:cli from the repository");
-      return installCli({ mode: "appimage", executablePath: appImage, fontconfigPath: path.join(process.resourcesPath, "fontconfig-cli.conf"), version: app.getVersion() });
-    }
-    if (!app.isPackaged) throw new Error("Open the packaged desktop app, or run npm run install:cli from the repository");
-    return installCli({ mode: "desktop", executablePath: process.execPath, version: app.getVersion() });
+    return packagedCliTarget().then((target) => installCli(target));
   });
   ipcMain.handle("ants:uninstall-cli", () => uninstallCli());
   ipcMain.handle("ants:open-external", async (_event, rawUrl: unknown) => {
@@ -174,6 +188,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  await syncManagedCliWithDesktop().catch((error) => console.error("Could not update the managed CLI:", error));
   stopStateChangeServer = await startStateChangeServer(notifyRendererStateChanged);
   stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();

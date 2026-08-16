@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Ants Nest contributors",
   "license": "MIT",
@@ -72,7 +72,7 @@
       }
     ],
     "linux": {
-      "artifactName": "Ants.Nest-${version}.${ext}",
+      "artifactName": "Ants.Nest.${ext}",
       "target": [
         "AppImage"
       ],
