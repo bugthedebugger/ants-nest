@@ -9,10 +9,12 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
-if (-not $nodeCommand) { throw "Ants Nest CLI requires Node.js 22 or newer." }
+if (-not $nodeCommand) { throw "Ants Nest CLI requires Node.js 22.13.0 or newer." }
 $nodePath = $nodeCommand.Source
-$nodeMajor = [int](& $nodePath -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 22) { throw "Ants Nest CLI requires Node.js 22 or newer." }
+$nodeVersion = @(& $nodePath -p "process.versions.node.split('.').slice(0,2).join('.')")[0].Split('.')
+$nodeMajor = [int]$nodeVersion[0]
+$nodeMinor = [int]$nodeVersion[1]
+if (($nodeMajor -lt 22) -or (($nodeMajor -eq 22) -and ($nodeMinor -lt 13))) { throw "Ants Nest CLI requires Node.js 22.13.0 or newer." }
 
 $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/releases/latest" -Headers @{ Accept = "application/vnd.github+json"; "User-Agent" = "ants-nest-installer" }
 $asset = $release.assets | Where-Object { $_.name -eq "ants-nest-cli.cjs" } | Select-Object -First 1

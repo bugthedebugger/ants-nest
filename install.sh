@@ -96,9 +96,13 @@ mkdir -p "$bin_directory" "$app_directory"
 chmod 700 "$app_directory"
 
 if [ "$mode" = "--cli-only" ]; then
-  command -v node >/dev/null 2>&1 || { echo "CLI-only installation requires Node.js 22 or newer. Use --all for a Node-free installation." >&2; exit 1; }
+  command -v node >/dev/null 2>&1 || { echo "CLI-only installation requires Node.js 22.13.0 or newer. Use --all for a Node-free installation." >&2; exit 1; }
   node_major="$(node -p 'Number(process.versions.node.split(".")[0])')"
-  [ "$node_major" -ge 22 ] || { echo "CLI-only installation requires Node.js 22 or newer. Use --all instead." >&2; exit 1; }
+  node_minor="$(node -p 'Number(process.versions.node.split(".")[1])')"
+  if [ "$node_major" -lt 22 ] || { [ "$node_major" -eq 22 ] && [ "$node_minor" -lt 13 ]; }; then
+    echo "CLI-only installation requires Node.js 22.13.0 or newer. Use --all instead." >&2
+    exit 1
+  fi
   node_path="$(command -v node)"
   download_verified "ants-nest-cli.cjs" "$temporary_directory/cli.cjs"
   install -m 600 "$temporary_directory/cli.cjs" "$cli_script"
