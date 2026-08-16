@@ -97,12 +97,13 @@ describe("curl installer", () => {
 describe("PowerShell installer", () => {
   it("verifies the release and installs protected native commands on the user PATH", async () => {
     const script = await fs.readFile(path.resolve("install.ps1"), "utf8");
-    expect(script).toContain("Node.js 22 or newer");
+    expect(script).toContain("Node.js 22.13.0 or newer");
     expect(script).toContain("Get-FileHash -Path $temporary -Algorithm SHA256");
     expect(script).toContain("does not contain ants-nest-cli.cjs");
     expect(script).toContain("is not managed by Ants Nest");
     expect(script).toContain('Join-Path $binDirectory "ants.cmd"');
     expect(script).toContain('Join-Path $binDirectory "ants-nest.cmd"');
     expect(script).toContain('[Environment]::SetEnvironmentVariable("Path", $newPath, "User")');
+    expect(script).not.toContain("--experimental-sqlite");
   });
 });

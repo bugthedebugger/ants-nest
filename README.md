@@ -33,13 +33,13 @@ Stopping, removing, or expiring a managed share terminates its connector, delete
 
 ## Install
 
-Install only the CLI on Linux or macOS (requires Node.js 22 or newer):
+Install only the CLI on Linux or macOS (requires Node.js 22.13.0 or newer):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.sh | sh -s -- --cli-only
 ```
 
-Install only the CLI on Windows from PowerShell (requires Node.js 22 or newer):
+Install only the CLI on Windows from PowerShell (requires Node.js 22.13.0 or newer):
 
 ```powershell
 irm https://raw.githubusercontent.com/bugthedebugger/ants-nest/main/install.ps1 | iex
@@ -57,7 +57,7 @@ From any packaged desktop build, open **Settings → Agent CLI → Install CLI**
 
 ## Requirements
 
-- Node.js 22 or newer for development or standalone CLI installation on Linux, macOS, or Windows. The Linux AppImage-backed CLI includes its own runtime.
+- Node.js 22.13.0 or newer for development or standalone CLI installation on Linux, macOS, or Windows. This minimum keeps the native SQLite API available without experimental runtime flags. The Linux AppImage-backed CLI includes its own runtime.
 - A Cloudflare zone and an API token with:
   - Account → Cloudflare Tunnel → Edit
   - Zone → DNS → Edit
