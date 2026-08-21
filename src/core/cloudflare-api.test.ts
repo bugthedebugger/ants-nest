@@ -23,6 +23,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   delete process.env.ANTS_NEST_HOME;
   await fs.rm(directory, { recursive: true, force: true });
@@ -105,5 +107,33 @@ describe("Cloudflare API setup", () => {
     await expect(deleteManagedTunnel({ tunnelId: "tunnel-uuid", hostname: "preview.tunnels.example.com", dnsRecordId: "dns-id" }))
       .rejects.toThrow("not owned by this Ants Nest tunnel");
     expect(calls.some((call) => call.init?.method === "DELETE")).toBe(false);
+  });
+
+  it("waits for recently stopped cloudflared connections before deleting a tunnel", async () => {
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback: (...args: unknown[]) => void) => {
+      queueMicrotask(callback);
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+    let tunnelDeleteAttempts = 0;
+    let connectionCleanups = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("dns_records?name=")) return success([]);
+      if (url.endsWith("/cfd_tunnel/tunnel-uuid/connections") && init?.method === "DELETE") {
+        connectionCleanups += 1;
+        return success(null);
+      }
+      if (url.endsWith("/cfd_tunnel/tunnel-uuid") && init?.method === "DELETE") {
+        tunnelDeleteAttempts += 1;
+        if (tunnelDeleteAttempts < 3) return new Response(JSON.stringify({ success: false, result: null, errors: [{ message: "This tunnel has active connections. Please stop all cloudflared replicas." }] }), { status: 409, headers: { "Content-Type": "application/json" } });
+        return success({ id: "tunnel-uuid" });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+    await fs.writeFile(path.join(directory, "cloudflare.json"), JSON.stringify(config), { mode: 0o600 });
+
+    await deleteManagedTunnel({ tunnelId: "tunnel-uuid", hostname: "preview.tunnels.example.com" });
+    expect(tunnelDeleteAttempts).toBe(3);
+    expect(connectionCleanups).toBe(1);
+    expect(timer).toHaveBeenCalledTimes(2);
   });
 });

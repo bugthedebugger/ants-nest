@@ -7,6 +7,8 @@ There is no Ants Nest account or hosted backend. The desktop app, CLI, Cloudflar
 ## Highlights
 
 - Create expiring quick shares and longer-lived named tunnels.
+- Share a file or folder directly without starting a separate web server.
+- Protect file and folder shares with a random access token by default, with an explicit public-share option.
 - Use any available first-level hostname from the Electron app or an authorized Remote access dashboard.
 - Give agents collision-safe CLI namespaces: `<name>-quick.<domain>` and `<name>-share.<domain>`.
 - Control tunnels from any paired device through the Remote access dashboard at `antsnest.<domain>`.
@@ -23,13 +25,15 @@ Assuming `CLOUDFLARE_PROXY_DOMAIN=example.com`:
 
 | Surface | Quick share | Named tunnel |
 | --- | --- | --- |
-| Electron / Remote access dashboard | User chooses an unused direct subdomain, such as `review.example.com` | User chooses an unused direct subdomain, such as `docs.example.com` |
+| Electron / Remote access dashboard | User enters an unused label such as `review`; Ants Nest appends the configured domain to form `review.example.com` | User enters an unused label such as `docs`; Ants Nest appends the configured domain to form `docs.example.com` |
 | CLI / agents | `<slug>-quick.example.com` | `<slug>-share.example.com` |
 | Remote access dashboard host | `antsnest.example.com` | — |
 
 These are first-level subdomains, so a normal full Cloudflare zone can serve them with Universal SSL. Ants Nest checks the exact hostname before provisioning and refuses to continue if any DNS record already occupies it. There is no replace or override option.
 
 Stopping, removing, or expiring a managed share terminates its connector, deletes the DNS record and Cloudflare Tunnel owned by Ants Nest, removes its connector token, and releases the hostname. Treat `stop` as terminal for that share; create a new one if it is needed again.
+
+Cloudflare can briefly report active tunnel connections after the local `cloudflared` process exits. Because every managed tunnel is dedicated to one Ants Nest share and `stop` is terminal, Ants Nest clears that tunnel's stale connector records and retries deletion during the propagation window. If Cloudflare still refuses cleanup, local access stays stopped and the retained profile can be passed to `ants stop` again later.
 
 ## Install
 
@@ -151,6 +155,39 @@ ants share http://localhost:5173 \
   --json
 ```
 
+### Share a file or folder directly
+
+Ants Nest includes a small, local-only static server, so neither you nor an agent needs to start a separate web server. Pass an existing file or folder as the positional value, or use `--path` explicitly:
+
+```bash
+ants share ./file.html \
+  --name "File preview" \
+  --description "Standalone HTML file for review" \
+  --expires 1h \
+  --json
+
+ants share --path ./dist \
+  --name "Built site" \
+  --description "Production build output for review" \
+  --expires 4h \
+  --json
+```
+
+File and folder shares require a random token by default. Their `publicUrl` includes `?token=...` and is the link to send to the intended recipient. Opening the bare hostname, or using an invalid token, does not expose any file: it shows an Ants Nest token-entry page instead. After successful verification, Ants Nest stores authorization in a secure, HTTP-only cookie and removes the token from the browser address bar. Folder shares serve `index.html` when one exists and otherwise show a simple directory browser.
+
+To intentionally create a public file or folder share, opt out explicitly:
+
+```bash
+ants share --path ./public-report.pdf \
+  --name "Public report" \
+  --description "Report intended for unrestricted distribution" \
+  --expires 1h \
+  --no-token \
+  --json
+```
+
+The same options work for named shares by using `ants create <name> --path <file-or-folder>`. Use exactly one of `--url` and `--path` with `ants create`.
+
 ### Create a named tunnel
 
 Named tunnels remain active until stopped or removed unless an expiration is supplied:
@@ -205,6 +242,7 @@ Ants Nest stores runtime data under `~/.ants-nest` by default:
 - `state.sqlite` — tunnel profiles and sessions
 - `cloudflare.json` — Cloudflare identifiers and API token
 - `tokens/` — individual connector tokens
+- `shares/` — user-only file-share server configurations and access tokens
 - `logs/` — connector logs
 - `bin/` — verified managed `cloudflared` installation
 
@@ -219,10 +257,11 @@ SQLite transactions coordinate concurrent Electron and CLI writes. User-only loc
 - The renderer is sandboxed behind a narrow typed preload bridge.
 - Child processes use argument arrays with `shell: false`.
 - API and connector tokens use user-only files and are never returned to the renderer.
+- File-share access tokens are generated randomly, stored in user-only files, and only included in the intended share URL. Bare and invalid-token requests cannot read shared content.
 - Connector tokens are supplied with `--token-file`, not process arguments.
 - DNS cleanup verifies record ownership before deletion.
 - Existing DNS records are never modified or replaced.
-- Public shares expose the configured local service to the Internet; use the shortest practical lifetime.
+- Local-service shares and file shares created with `--no-token` are public Internet exposure. Keep token verification enabled for private files and use the shortest practical lifetime.
 
 ## Development
 

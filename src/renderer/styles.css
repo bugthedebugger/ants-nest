@@ -123,6 +123,15 @@ button.secondary:hover { background: #202020; border-color: #444; }
 .kind-switch strong, .kind-switch small { display: block; }
 .kind-switch strong { margin-bottom: 3px; font-size: 10px; }
 .kind-switch small { color: #6f6d68; font-size: 8px; }
+.source-switch { margin: -12px 0 18px; padding: 3px; border: 1px solid #303030; border-radius: 9px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; background: #111; }
+.source-switch button { height: 34px; border: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 7px; background: transparent; color: #777570; font-size: 10px; cursor: pointer; }
+.source-switch button.active { background: #292929; color: #e3e0d9; }
+.token-toggle { padding: 12px; border: 1px solid #303030; border-radius: 9px; display: flex !important; flex-direction: row !important; align-items: flex-start; gap: 10px; background: #111; cursor: pointer; }
+.token-toggle input { width: 15px !important; height: 15px !important; margin-top: 1px; accent-color: #ddd9d1; }
+.token-toggle span { display: block; }
+.token-toggle strong { display: block; color: #d6d3cc; font-size: 10px; }
+.token-toggle small { margin-top: 4px !important; }
+.access-meta { display: inline-flex; align-items: center; gap: 4px; }
 :is(.modal, .settings-form) label { display: block; margin: 15px 0; color: #b6b4ae; font-size: 10px; font-weight: 620; }
 :is(.modal, .settings-form) input { width: 100%; height: 40px; margin-top: 7px; padding: 0 11px; border: 1px solid #343434; border-radius: 8px; outline: none; background: #0e0e0e; color: #eeece6; font: 11px ui-monospace, monospace; }
 :is(.modal, .settings-form) input:focus, .input-prefix:focus-within, .select-wrap:focus-within { border-color: #777; box-shadow: 0 0 0 3px #ffffff0b; }
@@ -130,6 +139,12 @@ button.secondary:hover { background: #202020; border-color: #444; }
 .input-prefix { margin-top: 7px; border: 1px solid #343434; border-radius: 8px; display: flex; overflow: hidden; background: #0e0e0e; }
 .input-prefix span { padding: 0 10px; border-right: 1px solid #2e2e2e; display: flex; align-items: center; color: #696762; background: #171717; font: 10px ui-monospace, monospace; }
 .input-prefix input { margin: 0; border: 0 !important; border-radius: 0; box-shadow: none !important; }
+.hostname-input input { min-width: 72px; flex: 1; }
+.hostname-input .domain-suffix { max-width: 62%; padding-left: 0; border-right: 0; white-space: nowrap; color: #aaa8a2; background: #0e0e0e; }
+.path-input input { min-width: 0; }
+.path-actions { padding: 4px; display: flex; gap: 3px; }
+.path-actions button { padding: 0 8px; border: 1px solid #333; border-radius: 5px; background: #1d1d1d; color: #aaa8a2; font-size: 9px; cursor: pointer; }
+.path-actions button:hover { color: #eeeae3; border-color: #555; }
 .select-wrap, .datetime-wrap { height: 40px; margin-top: 7px; padding: 0 10px; border: 1px solid #343434; border-radius: 8px; display: flex; align-items: center; color: #777570; background: #0e0e0e; }
 .select-wrap select { width: 100%; height: 100%; padding: 0 7px; border: 0; outline: none; color: #e2e0da; background: transparent; font-size: 11px; }
 .select-wrap option { background: #171717; }

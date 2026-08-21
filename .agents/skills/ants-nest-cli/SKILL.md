@@ -1,6 +1,6 @@
 ---
 name: ants-nest-cli
-description: Publish and manage local services with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, create a temporary review link, create an intentional named tunnel, manage the Remote access dashboard or its paired devices, inspect active Ants Nest tunnels, retrieve connector logs, or clean up a previously created share.
+description: Publish and manage local services, files, and folders with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, share a file or folder without creating a separate server, create a temporary review link, create an intentional named tunnel, manage the Remote access dashboard or its paired devices, inspect active Ants Nest tunnels, retrieve connector logs, or clean up a previously created share.
 ---
 
 # Ants Nest CLI
@@ -39,6 +39,24 @@ Quick shares require exactly one expiration:
 
 The CLI always derives `<name>-quick.<configured-domain>`. Do not invent or request a hostname flag.
 
+## Share a file or folder
+
+Use Ants Nest's built-in server instead of starting a separate HTTP server:
+
+```bash
+ants share --path <file-or-folder> \
+  --name "<short human-readable name>" \
+  --description "<what is shared and why>" \
+  --expires <duration> \
+  --json
+```
+
+An existing path may also be passed positionally, such as `ants share ./file.html ...`, but prefer `--path` in automation because it is unambiguous. Folders serve `index.html` when present and otherwise show a directory browser.
+
+Token verification is enabled by default. The returned `publicUrl` contains the access token and is the link to give the intended recipient. The bare hostname must only show a token-entry page; it must never expose shared content. Treat the complete tokenized URL as a sensitive credential and do not paste it into logs or public channels.
+
+Only add `--no-token` when the user explicitly asks for unrestricted public access. Never disable token verification merely for convenience.
+
 ## Create a named tunnel
 
 Use a named tunnel only when the user explicitly needs a stable or longer-lived route:
@@ -50,6 +68,8 @@ ants create <name> \
   --json
 ```
 
+For a named file or folder share, replace `--url` with `--path <file-or-folder>`. Token verification remains enabled by default; `--no-token` is the explicit opt-out.
+
 Add `--expires <duration>` or `--expires-at <ISO timestamp>` when a cutoff is known. The CLI always derives `<name>-share.<configured-domain>`.
 
 ## Report the result
@@ -57,11 +77,12 @@ Add `--expires <duration>` or `--expires-at <ISO timestamp>` when a cutoff is kn
 Parse JSON and return at least:
 
 - `publicUrl`
+- `baseUrl`, for token-protected file/folder shares
 - `profileId`
 - `expiresAt`, when present
-- a brief reminder that the URL is public
+- whether the share is token-protected or intentionally public
 
-Do not expose `tokenFile`, connector tokens, or Cloudflare credentials in user-facing output. A pairing credential may only be displayed when the user explicitly requests a new Remote access device link; treat it as a sensitive, single-use secret.
+Do not expose `tokenFile`, `shareConfigFile`, connector tokens, or Cloudflare credentials in user-facing output. A file-share token is intentionally included only in its returned `publicUrl`; treat that complete URL as sensitive. A pairing credential may only be displayed when the user explicitly requests a new Remote access device link; treat it as a sensitive, single-use secret.
 
 ## Manage Remote access
 
@@ -99,12 +120,14 @@ ants remove <profile-id>
 
 Quick shares also clean themselves up at expiration through a detached watchdog.
 
+Cloudflare may briefly report active connections after the local connector exits. Ants Nest clears stale connector records for its dedicated tunnel and retries cleanup automatically. If retries are exhausted, local access is already offline and the profile remains available; wait briefly, then retry the same `ants stop <profile-id>` command.
+
 ## Safety rules
 
-- Treat every share as public Internet exposure.
+- Treat local-service shares and file shares created with `--no-token` as public Internet exposure. Treat tokenized file-share URLs as bearer credentials.
 - Require a meaningful name and description.
-- Confirm the intended local port or URL; do not guess between multiple running services.
+- Confirm the intended local port, URL, file, or folder; do not guess between multiple possible sources.
 - Never pass, print, or persist a Cloudflare API token.
 - Never use `--api-token` in automation. If explicitly authorized to configure, prefer environment variables or `--api-token-stdin`.
 - Never attempt to replace an occupied hostname. Ants Nest deliberately has no override flag.
-- Do not bypass the CLI suffix rules; arbitrary tunnel hostnames belong to the Electron app or an authorized Remote access dashboard.
+- Do not bypass the CLI suffix rules. In Electron or an authorized Remote access dashboard, the user chooses only the first-level subdomain label; Ants Nest appends the configured base domain.

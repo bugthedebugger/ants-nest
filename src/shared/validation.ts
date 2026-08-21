@@ -22,6 +22,14 @@ export function validateHostname(value: string): string {
   return hostname;
 }
 
+export function hostnameFromSubdomain(subdomain: string, proxyDomain: string): string {
+  const label = subdomain.trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
+    throw new Error("Enter one subdomain label, for example preview");
+  }
+  return validateHostname(`${label}.${proxyDomain}`);
+}
+
 export function slug(value: string): string {
   const result = value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
   return result || "tunnel";
