@@ -84,6 +84,24 @@ describe("remote access server", () => {
     expect(authorized.status).toBe(200);
     expect(await authorized.json()).toEqual([]);
 
+    const browsed = await fetch(`${state.localUrl}/api/files?path=${encodeURIComponent(directory)}`, { headers: { Authorization: `Bearer ${credentials.token}` } });
+    expect(browsed.status).toBe(200);
+    expect(await browsed.json()).toMatchObject({
+      path: directory,
+      entries: expect.arrayContaining([expect.objectContaining({ name: "fake-cloudflared", kind: "file" })]),
+    });
+
+    const missingFileShare = await fetch(`${state.localUrl}/api/tunnels/quick-file`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Remote file", description: "Created from the paired dashboard", hostname: "files.tunnels.example.com",
+        path: path.join(directory, "missing.html"), tokenRequired: true, expiresInSeconds: 900,
+      }),
+    });
+    expect(missingFileShare.status).toBe(400);
+    expect(await missingFileShare.json()).toMatchObject({ error: expect.stringContaining("File or folder does not exist") });
+
     const secondPairing = newRemotePairing();
     const secondPairingToken = new URLSearchParams(new URL(secondPairing.pairingUrl!).hash.slice(1)).get("pair");
     const pairedSecond = await fetch(`${state.localUrl}/api/auth/pair`, {
@@ -122,6 +140,14 @@ describe("remote access server", () => {
     expect(page).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
     expect(page).toContain("history.scrollRestoration='manual'");
     expect(page).toContain("window.open(b.dataset.open,'_blank','noopener,noreferrer')");
+    expect(page).toContain('const proxyDomain="tunnels.example.com"');
+    expect(page).toContain('data-source="files"');
+    expect(page).toContain('id="token-required" type="checkbox" checked');
+    expect(page).toContain('id="browse-path"');
+    expect(page).toContain("api('/files?path='+encodeURIComponent(value))");
+    expect(page).toContain("<small class=\"public-host\">https://'+esc(host)");
+    expect(page).toContain("endpoint=files?'/tunnels/quick-file':'/tunnels/quick'");
+    expect(page).toContain("subdomain.value.trim().toLowerCase()+'.'+proxyDomain");
     expect(page).not.toContain(pairingToken);
     await stopStateEvents();
   }, 10_000);
