@@ -1,7 +1,11 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { createDesktopQuick, createQuickWithHostname, findRemoteTunnel, listTunnels, pauseTunnel, resumeRemoteTunnel, startTunnel, stopTunnel } from "./manager";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { createDesktopFileQuick, createDesktopQuick, createQuickWithHostname, findRemoteTunnel, listTunnels, pauseTunnel, resumeRemoteTunnel, startTunnel, stopTunnel } from "./manager";
 import { remotePage } from "./remote-page";
+import { readCloudflareConfig } from "./cloudflare-api";
 import { clearRemoteDevices, deleteRemoteDevice, readRemotePersistence, saveRemoteDevice, setRemoteEnabled, updateRemoteDeviceLastSeen } from "./store";
 import type { RemoteAccessState, RemoteDevice } from "../shared/types";
 
@@ -12,6 +16,7 @@ type ActiveRemote = {
   localUrl: string;
   publicUrl: string;
   startedAt: string;
+  proxyDomain: string;
   pairingTokenHash?: Buffer;
   pairingUrl?: string;
   devices: Map<string, DeviceRecord>;
@@ -67,6 +72,27 @@ function cleanDeviceName(value: unknown) {
   return value.trim().replace(/[\r\n\t]/g, " ").slice(0, 80) || "Mobile browser";
 }
 
+async function browsablePath(value: string | null) {
+  let requested = value?.trim();
+  if (!requested) {
+    const documents = path.join(os.homedir(), "Documents");
+    requested = await fs.stat(documents).then((stat) => stat.isDirectory() ? documents : os.homedir()).catch(() => os.homedir());
+  }
+  let resolved = await fs.realpath(path.resolve(requested));
+  const selected = await fs.stat(resolved);
+  if (!selected.isDirectory()) resolved = path.dirname(resolved);
+  const entries = await fs.readdir(resolved, { withFileTypes: true });
+  return {
+    path: resolved,
+    parent: path.dirname(resolved),
+    entries: entries
+      .filter((entry) => entry.isDirectory() || entry.isFile())
+      .map((entry) => ({ name: entry.name, path: path.join(resolved, entry.name), kind: entry.isDirectory() ? "folder" as const : "file" as const }))
+      .sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1)
+      .slice(0, 500),
+  };
+}
+
 function createRemoteServer(runtime: ActiveRemote) {
   return http.createServer(async (request, response) => {
     response.setHeader("Referrer-Policy", "no-referrer");
@@ -80,7 +106,7 @@ function createRemoteServer(runtime: ActiveRemote) {
           "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
           "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`,
         });
-        return response.end(remotePage(nonce));
+        return response.end(remotePage(nonce, runtime.proxyDomain));
       }
       if (request.method === "POST" && url.pathname === "/api/auth/pair") {
         const pairingToken = tokenFrom(request, "Pairing");
@@ -104,7 +130,9 @@ function createRemoteServer(runtime: ActiveRemote) {
         const tunnels = await listTunnels();
         return json(response, 200, tunnels.filter((tunnel) => tunnel.id !== runtime.tunnelId));
       }
+      if (request.method === "GET" && url.pathname === "/api/files") return json(response, 200, await browsablePath(url.searchParams.get("path")));
       if (request.method === "POST" && url.pathname === "/api/tunnels/quick") return json(response, 201, await createDesktopQuick(await body(request)));
+      if (request.method === "POST" && url.pathname === "/api/tunnels/quick-file") return json(response, 201, await createDesktopFileQuick(await body(request)));
       const match = url.pathname.match(/^\/api\/tunnels\/([^/]+)\/(start|stop)$/);
       if (request.method === "POST" && match?.[1] && match[2]) {
         const tunnel = match[2] === "start" ? await startTunnel(decodeURIComponent(match[1])) : await stopTunnel(decodeURIComponent(match[1]));
@@ -171,6 +199,8 @@ export async function revokeAllRemoteDevices(): Promise<RemoteAccessState> {
 
 export async function startRemoteAccess(): Promise<RemoteAccessState> {
   if (active) return snapshot(active);
+  const config = await readCloudflareConfig();
+  if (!config) throw new Error("Complete Cloudflare Setup before enabling Remote access");
   const persisted = await readRemotePersistence();
   const reusableTunnel = await findRemoteTunnel();
   let listenPort = 0;
@@ -187,6 +217,7 @@ export async function startRemoteAccess(): Promise<RemoteAccessState> {
     localUrl: "",
     publicUrl: "",
     startedAt: new Date().toISOString(),
+    proxyDomain: config.proxyDomain,
     devices: new Map(persisted.devices.map((device) => [device.id, { ...device, persistedLastSeenAt: device.lastSeenAt }])),
   };
   const server = createRemoteServer(runtime);
