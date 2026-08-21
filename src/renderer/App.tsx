@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Command, Copy, FileText, Globe2, MonitorSmartphone, MoreHorizontal, Phone, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
+import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Command, Copy, FileText, FolderOpen, Globe2, LockKeyhole, MonitorSmartphone, MoreHorizontal, Phone, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
 import type { CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
 import { formatRemaining } from "../shared/duration";
+import { hostnameFromSubdomain } from "../shared/validation";
 
 type Page = "tunnels" | "remote" | "settings";
 type Modal = "tunnel" | "logs" | null;
@@ -199,7 +200,7 @@ function TunnelRow({ tunnel, busy, onToggle, onLogs, onRemove }: { tunnel: Tunne
       <div className="tunnel-heading"><h3>{tunnel.name}</h3><span className={`pill ${tunnel.status}`}><i />{tunnel.status}</span><span className="kind-label">{tunnel.kind}</span></div>
       <div className="url">{tunnel.publicUrl ? <><button onClick={() => void window.antsNest.openExternal(tunnel.publicUrl!)}>{tunnel.publicUrl.replace("https://", "")}<ArrowUpRight size={13}/></button><CopyButton value={tunnel.publicUrl}/></> : <span>Link appears when started</span>}</div>
       <p title={tunnel.description}>{tunnel.description || "No description"}</p>
-      <div className="tunnel-meta"><span>{tunnel.origin}</span><i/><span>{tunnel.expiresAt ? `Expires ${formatRemaining(tunnel.expiresAt)}` : `Started ${relativeTime(tunnel.startedAt)}`}</span></div>
+      <div className="tunnel-meta"><span>{tunnel.sharedPath || tunnel.origin}</span>{tunnel.sharedPath && <><i/><span className="access-meta"><LockKeyhole size={10}/>{tunnel.tokenRequired === false ? "Public" : "Token protected"}</span></>}<i/><span>{tunnel.expiresAt ? `Expires ${formatRemaining(tunnel.expiresAt)}` : `Started ${relativeTime(tunnel.startedAt)}`}</span></div>
     </div>
     <div className="row-actions"><button className={`toggle ${online ? "stop" : "start"}`} disabled={busy} onClick={onToggle}>{busy ? <RefreshCw className="spin" size={15}/> : online ? <CircleStop size={15}/> : <Play size={15}/>} {online ? "Release" : "Start"}</button>
       <div className="menu"><button className="icon-button"><MoreHorizontal size={17}/></button><div className="menu-pop"><button onClick={onLogs}><FileText size={14}/> Logs</button><button className="danger" onClick={onRemove}><Trash2 size={14}/> Remove</button></div></div>
@@ -209,28 +210,36 @@ function TunnelRow({ tunnel, busy, onToggle, onLogs, onRemove }: { tunnel: Tunne
 
 function TunnelModal({ installed, proxyDomain, busy, onClose, onComplete }: { installed: boolean; proxyDomain?: string | undefined; busy: boolean; onClose(): void; onComplete(task: () => Promise<unknown>): Promise<void> }) {
   const [kind, setKind] = useState<"quick" | "named">("quick");
+  const [sourceKind, setSourceKind] = useState<"service" | "files">("service");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [origin, setOrigin] = useState("3000");
-  const [hostname, setHostname] = useState(proxyDomain ? `preview.${proxyDomain}` : "");
+  const [sharedPath, setSharedPath] = useState("");
+  const [tokenRequired, setTokenRequired] = useState(true);
+  const [subdomain, setSubdomain] = useState("preview");
   const [expirationMode, setExpirationMode] = useState("3600");
   const [expiresAt, setExpiresAt] = useState(() => new Date(Date.now() + 3_600_000 - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16));
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!proxyDomain) return;
+    const hostname = hostnameFromSubdomain(subdomain, proxyDomain);
     const expiration = expirationMode === "exact" ? { expiresAt: new Date(expiresAt).toISOString() } : expirationMode ? { expiresInSeconds: Number(expirationMode) } : {};
-    void onComplete(() => kind === "quick" ? window.antsNest.quick({ name, description, origin, hostname, ...expiration }) : window.antsNest.createNamed({ name, description, origin, hostname, ...expiration }));
+    void onComplete(() => sourceKind === "files"
+      ? kind === "quick" ? window.antsNest.quickFile({ name, description, path: sharedPath, hostname, tokenRequired, ...expiration }) : window.antsNest.createNamedFile({ name, description, path: sharedPath, hostname, tokenRequired, ...expiration })
+      : kind === "quick" ? window.antsNest.quick({ name, description, origin, hostname, ...expiration }) : window.antsNest.createNamed({ name, description, origin, hostname, ...expiration }));
   }
   return <div className="backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><h2>New tunnel</h2><p>Publish a local service on an available hostname.</p></div><button type="button" className="icon-button close" onClick={onClose}><X size={18}/></button></div>
+    <div className="modal-head"><div><h2>New share</h2><p>Publish a local service, file, or folder on an available hostname.</p></div><button type="button" className="icon-button close" onClick={onClose}><X size={18}/></button></div>
     <div className="kind-switch"><button type="button" className={kind === "quick" ? "active" : ""} onClick={() => { setKind("quick"); if (!expirationMode) setExpirationMode("3600"); }}><Zap size={15}/><span><strong>Quick share</strong><small>Expiration required</small></span></button><button type="button" className={kind === "named" ? "active" : ""} onClick={() => { setKind("named"); setExpirationMode(""); }}><Globe2 size={15}/><span><strong>Named tunnel</strong><small>Runs until released</small></span></button></div>
+    <div className="source-switch"><button type="button" className={sourceKind === "service" ? "active" : ""} onClick={() => setSourceKind("service")}><Radio size={14}/> Local service</button><button type="button" className={sourceKind === "files" ? "active" : ""} onClick={() => setSourceKind("files")}><FolderOpen size={14}/> File or folder</button></div>
     {!installed && <div className="warning">cloudflared is not installed. Complete Cloudflare Setup to install it.</div>}
     <label>Name<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Docs preview" required /></label>
-    <label>Public hostname<div className="input-prefix"><span>https://</span><input value={hostname} onChange={(event) => setHostname(event.target.value)} placeholder={proxyDomain ? `anything.${proxyDomain}` : "anything.example.com"} required /></div><small>Any unused direct subdomain of {proxyDomain || "your configured domain"}. Existing DNS records are never replaced.</small></label>
+    <label>Public hostname<div className="input-prefix hostname-input"><span>https://</span><input value={subdomain} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} placeholder="preview" pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} autoCapitalize="none" spellCheck={false} required /><span className="domain-suffix">.{proxyDomain || "configure-domain-first"}</span></div><small>Choose an unused direct subdomain. Existing DNS records are never replaced.</small></label>
     <label>Description<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this link exposes and who it is for" maxLength={240} required /><small>Shown in the desktop app, CLI, and phone dashboard.</small></label>
-    <label>Local service<div className="input-prefix"><span>URL</span><input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="3000 or http://localhost:3000" required /></div><small>A port is automatically expanded to localhost.</small></label>
+    {sourceKind === "service" ? <label>Local service<div className="input-prefix"><span>URL</span><input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="3000 or http://localhost:3000" required /></div><small>A port is automatically expanded to localhost.</small></label> : <><label>File or folder path<div className="input-prefix path-input"><span>PATH</span><input value={sharedPath} onChange={(e) => setSharedPath(e.target.value)} placeholder="/home/me/project/file.html" required /><div className="path-actions"><button type="button" onClick={() => void window.antsNest.chooseSharePath("file").then((value) => value && setSharedPath(value))}>File</button><button type="button" onClick={() => void window.antsNest.chooseSharePath("folder").then((value) => value && setSharedPath(value))}>Folder</button></div></div><small>Ants Nest serves this path itself. Folders show index.html when present, or a directory browser otherwise.</small></label><label className="token-toggle"><input type="checkbox" checked={tokenRequired} onChange={(event) => setTokenRequired(event.target.checked)}/><span><strong>Require an access token</strong><small>Recommended and enabled by default. The share URL includes the token; the bare hostname asks visitors to enter it.</small></span></label></>}
     {kind === "quick" && <label>Required expiration<div className="select-wrap"><Clock3 size={14}/><select value={expirationMode} onChange={(event) => setExpirationMode(event.target.value)}><optgroup label="Duration"><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="14400">4 hours</option><option value="86400">24 hours</option></optgroup><option value="exact">At a specific date & time…</option></select></div>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>{expirationMode === "exact" ? "Uses this computer’s local timezone." : "Every Quick Share is stopped by a background watchdog even when Ants Nest is closed."}</small></label>}
     {kind === "named" && <label>Release hostname<div className="select-wrap"><Clock3 size={14}/><select value={expirationMode} onChange={(event) => setExpirationMode(event.target.value)}><option value="">When manually stopped or removed</option><optgroup label="Automatic expiration"><option value="900">After 15 minutes</option><option value="3600">After 1 hour</option><option value="14400">After 4 hours</option><option value="86400">After 24 hours</option></optgroup><option value="exact">At a specific date & time…</option></select></div>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>Stopping, removing, or expiration deletes the owned DNS record and Cloudflare Tunnel.</small></label>}
-    <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !installed}>{busy ? <><RefreshCw className="spin" size={15}/> Connecting…</> : <><Radio size={15}/> Create & start</>}</button></div>
+    <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !installed || !proxyDomain}>{busy ? <><RefreshCw className="spin" size={15}/> Connecting…</> : <><Radio size={15}/> Create & start</>}</button></div>
   </form></div>;
 }
 

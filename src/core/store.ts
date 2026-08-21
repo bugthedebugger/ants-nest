@@ -39,6 +39,10 @@ async function openDatabase() {
       tunnel_id TEXT,
       dns_record_id TEXT,
       token_file TEXT,
+      shared_path TEXT,
+      share_config_file TEXT,
+      token_required INTEGER CHECK (token_required IN (0, 1)),
+      local_server_port INTEGER,
       expires_in_seconds INTEGER,
       fixed_expires_at TEXT,
       created_at TEXT NOT NULL
@@ -48,8 +52,10 @@ async function openDatabase() {
       profile_id TEXT PRIMARY KEY REFERENCES tunnel_profiles(id) ON DELETE CASCADE,
       pid INTEGER,
       expiry_pid INTEGER,
+      file_server_pid INTEGER,
       status TEXT NOT NULL CHECK (status IN ('starting', 'online', 'stopped', 'failed')),
       public_url TEXT,
+      base_url TEXT,
       started_at TEXT,
       stopped_at TEXT,
       expires_at TEXT,
@@ -77,8 +83,14 @@ async function openDatabase() {
   `);
   const profileColumns = database.prepare("PRAGMA table_info(tunnel_profiles)").all() as Array<{ name: string }>;
   if (!profileColumns.some((column) => column.name === "dns_record_id")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN dns_record_id TEXT");
+  if (!profileColumns.some((column) => column.name === "shared_path")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN shared_path TEXT");
+  if (!profileColumns.some((column) => column.name === "share_config_file")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN share_config_file TEXT");
+  if (!profileColumns.some((column) => column.name === "token_required")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN token_required INTEGER");
+  if (!profileColumns.some((column) => column.name === "local_server_port")) database.exec("ALTER TABLE tunnel_profiles ADD COLUMN local_server_port INTEGER");
   const sessionColumns = database.prepare("PRAGMA table_info(tunnel_sessions)").all() as Array<{ name: string }>;
   if (!sessionColumns.some((column) => column.name === "expiry_pid")) database.exec("ALTER TABLE tunnel_sessions ADD COLUMN expiry_pid INTEGER");
+  if (!sessionColumns.some((column) => column.name === "file_server_pid")) database.exec("ALTER TABLE tunnel_sessions ADD COLUMN file_server_pid INTEGER");
+  if (!sessionColumns.some((column) => column.name === "base_url")) database.exec("ALTER TABLE tunnel_sessions ADD COLUMN base_url TEXT");
   await fs.chmod(paths.database(), 0o600);
   return database;
 }
@@ -109,6 +121,10 @@ function stateFromDatabase(database: Database): State {
       ...(optionalString(row, "tunnel_id") ? { tunnelId: optionalString(row, "tunnel_id") } : {}),
       ...(optionalString(row, "dns_record_id") ? { dnsRecordId: optionalString(row, "dns_record_id") } : {}),
       ...(optionalString(row, "token_file") ? { tokenFile: optionalString(row, "token_file") } : {}),
+      ...(optionalString(row, "shared_path") ? { sharedPath: optionalString(row, "shared_path") } : {}),
+      ...(optionalString(row, "share_config_file") ? { shareConfigFile: optionalString(row, "share_config_file") } : {}),
+      ...(typeof row.token_required === "number" ? { tokenRequired: row.token_required === 1 } : {}),
+      ...(optionalNumber(row, "local_server_port") ? { localServerPort: optionalNumber(row, "local_server_port") } : {}),
       ...(optionalNumber(row, "expires_in_seconds") ? { expiresInSeconds: optionalNumber(row, "expires_in_seconds") } : {}),
       ...(optionalString(row, "fixed_expires_at") ? { fixedExpiresAt: optionalString(row, "fixed_expires_at") } : {}),
       createdAt: String(row.created_at),
@@ -118,7 +134,9 @@ function stateFromDatabase(database: Database): State {
       status: String(row.status),
       ...(optionalNumber(row, "pid") ? { pid: optionalNumber(row, "pid") } : {}),
       ...(optionalNumber(row, "expiry_pid") ? { expiryPid: optionalNumber(row, "expiry_pid") } : {}),
+      ...(optionalNumber(row, "file_server_pid") ? { fileServerPid: optionalNumber(row, "file_server_pid") } : {}),
       ...(optionalString(row, "public_url") ? { publicUrl: optionalString(row, "public_url") } : {}),
+      ...(optionalString(row, "base_url") ? { baseUrl: optionalString(row, "base_url") } : {}),
       ...(optionalString(row, "started_at") ? { startedAt: optionalString(row, "started_at") } : {}),
       ...(optionalString(row, "stopped_at") ? { stoppedAt: optionalString(row, "stopped_at") } : {}),
       ...(optionalString(row, "expires_at") ? { expiresAt: optionalString(row, "expires_at") } : {}),
@@ -132,14 +150,16 @@ function insertProfiles(statement: Statement, profiles: TunnelProfile[]) {
   for (const profile of profiles) statement.run(
     profile.id, profile.name, profile.description, profile.kind, profile.origin,
     profile.hostname ?? null, profile.tunnelName ?? null, profile.tunnelId ?? null,
-    profile.dnsRecordId ?? null, profile.tokenFile ?? null, profile.expiresInSeconds ?? null, profile.fixedExpiresAt ?? null,
+    profile.dnsRecordId ?? null, profile.tokenFile ?? null, profile.sharedPath ?? null, profile.shareConfigFile ?? null,
+    profile.tokenRequired === undefined ? null : profile.tokenRequired ? 1 : 0, profile.localServerPort ?? null,
+    profile.expiresInSeconds ?? null, profile.fixedExpiresAt ?? null,
     profile.createdAt,
   );
 }
 
 function insertSessions(statement: Statement, sessions: TunnelSession[]) {
   for (const session of sessions) statement.run(
-    session.profileId, session.pid ?? null, session.expiryPid ?? null, session.status, session.publicUrl ?? null,
+    session.profileId, session.pid ?? null, session.expiryPid ?? null, session.fileServerPid ?? null, session.status, session.publicUrl ?? null, session.baseUrl ?? null,
     session.startedAt ?? null, session.stoppedAt ?? null, session.expiresAt ?? null,
     session.error ?? null, session.logPath ?? null,
   );
@@ -150,11 +170,11 @@ function replaceState(database: Database, input: State) {
   database.exec("DELETE FROM tunnel_sessions; DELETE FROM tunnel_profiles;");
   insertProfiles(database.prepare(`INSERT INTO tunnel_profiles (
     id, name, description, kind, origin, hostname, tunnel_name, tunnel_id, dns_record_id, token_file,
-    expires_in_seconds, fixed_expires_at, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.profiles);
+    shared_path, share_config_file, token_required, local_server_port, expires_in_seconds, fixed_expires_at, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.profiles);
   insertSessions(database.prepare(`INSERT INTO tunnel_sessions (
-    profile_id, pid, expiry_pid, status, public_url, started_at, stopped_at, expires_at, error, log_path
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.sessions);
+    profile_id, pid, expiry_pid, file_server_pid, status, public_url, base_url, started_at, stopped_at, expires_at, error, log_path
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), state.sessions);
 }
 
 export async function readState(): Promise<State> {

@@ -43,6 +43,29 @@ async function request<T>(config: CloudflareSetupInput, apiPath: string, init: R
   return envelope.result;
 }
 
+function activeConnectionsError(error: unknown) {
+  return error instanceof Error && /active connections|stop all cloudflared replicas|connections to close/i.test(error.message);
+}
+
+async function deleteTunnelAfterConnectionsClose(config: CloudflareSetupInput, tunnelId: string) {
+  const delays = [250, 500, 1_000, 2_000, 3_000, 3_000, 3_000];
+  let staleConnectionsCleared = false;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await request(config, `/accounts/${config.accountId}/cfd_tunnel/${tunnelId}`, { method: "DELETE" });
+      return;
+    } catch (error) {
+      const delay = delays[attempt];
+      if (!activeConnectionsError(error) || delay === undefined) throw error;
+      if (!staleConnectionsCleared) {
+        await request(config, `/accounts/${config.accountId}/cfd_tunnel/${tunnelId}/connections`, { method: "DELETE" });
+        staleConnectionsCleared = true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export async function verifyCloudflareConfig(input: CloudflareSetupInput): Promise<CloudflareSetupInput> {
   const config = cloudflareSetupSchema.parse({ ...input, proxyDomain: validateHostname(input.proxyDomain) });
   await Promise.all([
@@ -124,5 +147,5 @@ export async function deleteManagedTunnel(input: { tunnelId: string; hostname: s
     throw new Error(`Refusing to release ${hostname}: its DNS record is not owned by this Ants Nest tunnel.`);
   }
   if (owned) await request(config, `/zones/${config.zoneId}/dns_records/${owned.id}`, { method: "DELETE" });
-  await request(config, `/accounts/${config.accountId}/cfd_tunnel/${input.tunnelId}`, { method: "DELETE" });
+  await deleteTunnelAfterConnectionsClose(config, input.tunnelId);
 }

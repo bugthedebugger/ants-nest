@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import fs from "node:fs/promises";
+import path from "node:path";
 import QRCode from "qrcode";
 import packageMetadata from "../../package.json";
 import { requestAppControl } from "../core/app-control";
-import { configureCloudflare, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
-import { formatRemaining, parseDuration, parseExpirationTime } from "../shared/duration";
+import { configureCloudflare, createFileNamed, createFileQuick, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { parseDuration, parseExpirationTime } from "../shared/duration";
 import type { CloudflareSetupInput, RemoteAccessState } from "../shared/types";
+import { formatTunnelList } from "./format";
 
 const program = new Command();
 program.name("ants-nest").description("Create and manage Cloudflare Tunnel share links").version(packageMetadata.version);
@@ -118,36 +121,50 @@ program.command("setup").alias("configure").description("Install cloudflared, th
     output(result, options.json);
   }));
 program.command("share")
-  .description("Create a temporary public link that expires automatically")
-  .argument("[origin]", "port or origin URL", "3000")
+  .description("Share a local service, file, or folder with automatic expiration")
+  .argument("[origin-or-path]", "port, origin URL, or existing file/folder", "3000")
   .requiredOption("-n, --name <name>", "display name")
   .requiredOption("-d, --description <description>", "what this link exposes")
   .option("-e, --expires <duration>", "automatically stop after 15m, 1h, 4h, or 1d")
   .option("--expires-at <date-time>", "stop at an exact ISO or local date-time")
+  .option("--path <path>", "share this file or folder using Ants Nest's built-in server")
+  .option("--no-token", "make a file/folder share public without token verification")
   .option("--json", "machine-readable output")
-  .action((origin, options) => wrap(async () => {
+  .action((originOrPath, options) => wrap(async () => {
     if (options.expires && options.expiresAt) throw new Error("Use either --expires or --expires-at, not both");
     if (!options.expires && !options.expiresAt) throw new Error("Quick shares require --expires <duration> or --expires-at <date-time>");
-    const tunnel = await createQuick({ name: options.name, description: options.description, origin, ...(options.expires ? { expiresInSeconds: parseDuration(options.expires) } : {}), ...(options.expiresAt ? { expiresAt: parseExpirationTime(options.expiresAt) } : {}) });
+    const expiration = { ...(options.expires ? { expiresInSeconds: parseDuration(options.expires) } : {}), ...(options.expiresAt ? { expiresAt: parseExpirationTime(options.expiresAt) } : {}) };
+    const explicitPath = options.path ? path.resolve(options.path) : undefined;
+    const positionalPath = !options.path && await fs.stat(path.resolve(originOrPath)).then((stat) => stat.isFile() || stat.isDirectory()).catch(() => false) ? path.resolve(originOrPath) : undefined;
+    const tunnel = explicitPath || positionalPath
+      ? await createFileQuick({ name: options.name, description: options.description, path: explicitPath || positionalPath!, tokenRequired: options.token, ...expiration })
+      : await createQuick({ name: options.name, description: options.description, origin: originOrPath, ...expiration });
     output(options.json ? tunnel : tunnel.publicUrl || tunnel, options.json);
   }));
 program.command("create")
-  .description("Create a persistent public link (expiration optional)")
+  .description("Create a persistent link for a local service, file, or folder (expiration optional)")
   .argument("<name>")
   .requiredOption("-d, --description <description>", "what this hostname exposes")
-  .requiredOption("-u, --url <origin>", "local port or URL")
+  .option("-u, --url <origin>", "local port or URL")
+  .option("--path <path>", "share this file or folder using Ants Nest's built-in server")
+  .option("--no-token", "make a file/folder share public without token verification")
   .option("-e, --expires <duration>", "release the hostname after 15m, 1h, 4h, or 1d")
   .option("--expires-at <date-time>", "release the hostname at an exact ISO or local date-time")
   .option("--json")
   .action((name, options) => wrap(async () => {
     if (options.expires && options.expiresAt) throw new Error("Use either --expires or --expires-at, not both");
-    output(await createNamed({ name, description: options.description, origin: options.url, ...(options.expires ? { expiresInSeconds: parseDuration(options.expires) } : {}), ...(options.expiresAt ? { expiresAt: parseExpirationTime(options.expiresAt) } : {}) }), options.json);
+    if (Boolean(options.url) === Boolean(options.path)) throw new Error("Use exactly one of --url <origin> or --path <file-or-folder>");
+    const expiration = { ...(options.expires ? { expiresInSeconds: parseDuration(options.expires) } : {}), ...(options.expiresAt ? { expiresAt: parseExpirationTime(options.expiresAt) } : {}) };
+    const tunnel = options.path
+      ? await createFileNamed({ name, description: options.description, path: path.resolve(options.path), tokenRequired: options.token, ...expiration })
+      : await createNamed({ name, description: options.description, origin: options.url, ...expiration });
+    output(tunnel, options.json);
   }));
 program.command("list").alias("ls").description("List tunnel profiles and live status").option("--json").action((options) => wrap(async () => {
   const tunnels = await listTunnels();
   if (options.json) return output(tunnels, true);
   if (!tunnels.length) return output("No tunnels yet. Try: ants share 3000");
-  console.table(tunnels.map(({ id, name, description, kind, origin, status, publicUrl, expiresAt }) => ({ id: id.slice(0, 8), name, description, kind, origin, status, expires: formatRemaining(expiresAt) || "—", url: publicUrl || "—" })));
+  output(formatTunnelList(tunnels));
 }));
 program.command("start").argument("<id-or-name>").option("--json").action((id, options) => wrap(async () => output(await startTunnel(id), options.json)));
 program.command("stop").argument("<id-or-name>").description("Stop a Quick Share or permanently release a Named Tunnel").option("--json").action((id, options) => wrap(async () => output(await stopTunnel(id), options.json)));
@@ -184,4 +201,6 @@ remote.command("disable").description("End Remote access and release its hostnam
   else console.log("Remote access disabled");
 }));
 
-export const cliCompletion = program.parseAsync();
+export const cliCompletion = process.env.ANTS_NEST_FILE_SHARE_WORKER_CONFIG
+  ? import("../core/file-share-server").then(({ runFileShareWorker }) => runFileShareWorker(process.env.ANTS_NEST_FILE_SHARE_WORKER_CONFIG!))
+  : program.parseAsync();

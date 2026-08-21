@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { normalizeOrigin, slug, validateHostname } from "./validation";
+import { hostnameFromSubdomain, normalizeOrigin, slug, validateHostname } from "./validation";
 import { parseDuration, parseExpirationTime } from "./duration";
-import { namedInputSchema, quickInputSchema } from "./types";
+import { fileQuickInputSchema, namedInputSchema, quickInputSchema } from "./types";
 
 describe("normalizeOrigin", () => {
   it("expands port shorthand", () => expect(normalizeOrigin("3000")).toBe("http://localhost:3000"));
@@ -13,6 +13,8 @@ describe("normalizeOrigin", () => {
 describe("hostname validation", () => {
   it("normalizes a URL-like hostname", () => expect(validateHostname("HTTPS://Preview.Example.com/")).toBe("preview.example.com"));
   it("rejects a single label", () => expect(() => validateHostname("localhost")).toThrow("valid hostname"));
+  it("builds a hostname from one label and the configured domain", () => expect(hostnameFromSubdomain("Preview", "bugthedebugger.com")).toBe("preview.bugthedebugger.com"));
+  it("rejects a full hostname where one label is expected", () => expect(() => hostnameFromSubdomain("preview.example.com", "bugthedebugger.com")).toThrow("one subdomain label"));
 });
 
 describe("slug", () => {
@@ -43,5 +45,10 @@ describe("tunnel metadata", () => {
     expect(() => quickInputSchema.parse(input)).toThrow("require either a duration or an exact expiration time");
     expect(() => quickInputSchema.parse({ ...input, expiresInSeconds: 300, expiresAt: "2099-01-01T00:00:00.000Z" })).toThrow();
     expect(quickInputSchema.parse({ ...input, expiresInSeconds: 300 }).expiresInSeconds).toBe(300);
+  });
+  it("protects file shares by default while allowing an explicit public share", () => {
+    const input = { name: "File", description: "Private file", path: "/tmp/file.html", expiresInSeconds: 300 };
+    expect(fileQuickInputSchema.parse(input).tokenRequired).toBe(true);
+    expect(fileQuickInputSchema.parse({ ...input, tokenRequired: false }).tokenRequired).toBe(false);
   });
 });

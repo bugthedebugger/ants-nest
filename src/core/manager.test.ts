@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDesktopNamed, createDesktopQuick, createNamed, createQuick, expireTunnel, listTunnels, stopTunnel } from "./manager";
+import { createDesktopNamed, createDesktopQuick, createFileQuick, createNamed, createQuick, expireTunnel, listTunnels, stopTunnel } from "./manager";
 import { isRunning } from "./cloudflared";
 
 let directory = "";
@@ -26,6 +26,9 @@ setInterval(() => {}, 1000);
   const expiryWorker = path.join(directory, "fake-expiry-worker");
   await fs.writeFile(expiryWorker, "#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n", { mode: 0o700 });
   process.env.ANTS_NEST_EXPIRY_WORKER = expiryWorker;
+  const fileShareWorker = path.join(directory, "fake-file-share-worker.cjs");
+  await fs.writeFile(fileShareWorker, `const fs=require('node:fs');const http=require('node:http');const config=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));http.createServer((_request,response)=>response.end('shared')).listen(config.port,'127.0.0.1');`);
+  process.env.ANTS_NEST_FILE_SHARE_WORKER = fileShareWorker;
   await fs.mkdir(process.env.ANTS_NEST_HOME, { recursive: true });
   await fs.writeFile(path.join(process.env.ANTS_NEST_HOME, "cloudflare.json"), JSON.stringify({
     proxyDomain: "tunnels.example.com", zoneId: "a".repeat(32), accountId: "b".repeat(32), apiToken: "test_api_token_that_is_long_enough",
@@ -47,6 +50,7 @@ afterEach(async () => {
   delete process.env.ANTS_NEST_HOME;
   delete process.env.CLOUDFLARED_BIN;
   delete process.env.ANTS_NEST_EXPIRY_WORKER;
+  delete process.env.ANTS_NEST_FILE_SHARE_WORKER;
   vi.unstubAllGlobals();
   await fs.rm(directory, { recursive: true, force: true });
 });
@@ -81,6 +85,22 @@ describe("tunnel manager", () => {
     expect(started.publicUrl).toBe("https://docs-preview-share.tunnels.example.com");
     await stopTunnel(started.id);
     expect(await listTunnels()).toEqual([]);
+  }, 10_000);
+
+  it("hosts a file itself and returns a protected link by default", async () => {
+    const file = path.join(directory, "file.html");
+    await fs.writeFile(file, "<h1>Review me</h1>");
+    const started = await createFileQuick({ name: "File preview", description: "Private HTML preview", path: file, expiresInSeconds: 300 });
+    expect(started.status).toBe("online");
+    expect(started.sharedPath).toBe(file);
+    expect(started.tokenRequired).toBe(true);
+    expect(started.baseUrl).toBe("https://file-preview-quick.tunnels.example.com");
+    expect(started.publicUrl).toMatch(/^https:\/\/file-preview-quick\.tunnels\.example\.com\/\?token=[A-Za-z0-9_-]{32}$/);
+    expect(started.tokenFile).toBeUndefined();
+    expect(started.shareConfigFile).toBeUndefined();
+    expect(isRunning(started.fileServerPid)).toBe(true);
+    await stopTunnel(started.id);
+    expect(isRunning(started.fileServerPid)).toBe(false);
   }, 10_000);
 
   it("lets the desktop choose an unsuffixed first-level hostname", async () => {

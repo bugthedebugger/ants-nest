@@ -14,6 +14,10 @@ export const tunnelProfileSchema = z.object({
   tunnelId: z.string().optional(),
   dnsRecordId: z.string().optional(),
   tokenFile: z.string().optional(),
+  sharedPath: z.string().optional(),
+  shareConfigFile: z.string().optional(),
+  tokenRequired: z.boolean().optional(),
+  localServerPort: z.number().int().positive().max(65535).optional(),
   expiresInSeconds: z.number().int().min(60).max(2_592_000).optional(),
   fixedExpiresAt: z.string().datetime().optional(),
   createdAt: z.string(),
@@ -23,8 +27,10 @@ export const tunnelSessionSchema = z.object({
   profileId: z.string(),
   pid: z.number().int().positive().optional(),
   expiryPid: z.number().int().positive().optional(),
+  fileServerPid: z.number().int().positive().optional(),
   status: tunnelStatusSchema,
   publicUrl: z.string().optional(),
+  baseUrl: z.string().optional(),
   startedAt: z.string().optional(),
   stoppedAt: z.string().optional(),
   expiresAt: z.string().optional(),
@@ -102,14 +108,32 @@ export const namedInputSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 }).refine((input) => !(input.expiresInSeconds && input.expiresAt), { message: "Choose a duration or an exact expiration time, not both" });
 
+const fileFields = {
+  name: shareNameSchema,
+  description: z.string().trim().min(1, "Description is required").max(240),
+  path: z.string().trim().min(1, "File or folder path is required"),
+  tokenRequired: z.boolean().default(true),
+  expiresInSeconds: z.number().int().min(60).max(2_592_000).optional(),
+  expiresAt: z.string().datetime().optional(),
+};
+
+export const fileQuickInputSchema = z.object(fileFields).refine((input) => Boolean(input.expiresInSeconds) !== Boolean(input.expiresAt), { message: "Quick shares require either a duration or an exact expiration time" });
+export const fileNamedInputSchema = z.object(fileFields).refine((input) => !(input.expiresInSeconds && input.expiresAt), { message: "Choose a duration or an exact expiration time, not both" });
+
 const desktopHostnameSchema = z.string().trim().min(1, "Public hostname is required").max(253);
 export const desktopQuickInputSchema = z.intersection(quickInputSchema, z.object({ hostname: desktopHostnameSchema }));
 export const desktopNamedInputSchema = z.intersection(namedInputSchema, z.object({ hostname: desktopHostnameSchema }));
+export const desktopFileQuickInputSchema = z.intersection(fileQuickInputSchema, z.object({ hostname: desktopHostnameSchema }));
+export const desktopFileNamedInputSchema = z.intersection(fileNamedInputSchema, z.object({ hostname: desktopHostnameSchema }));
 
 export type QuickInput = z.input<typeof quickInputSchema>;
 export type NamedInput = z.input<typeof namedInputSchema>;
 export type DesktopQuickInput = z.input<typeof desktopQuickInputSchema>;
 export type DesktopNamedInput = z.input<typeof desktopNamedInputSchema>;
+export type FileQuickInput = z.input<typeof fileQuickInputSchema>;
+export type FileNamedInput = z.input<typeof fileNamedInputSchema>;
+export type DesktopFileQuickInput = z.input<typeof desktopFileQuickInputSchema>;
+export type DesktopFileNamedInput = z.input<typeof desktopFileNamedInputSchema>;
 
 export type AntsNestApi = {
   onStateChanged(callback: () => void): () => void;
@@ -118,7 +142,9 @@ export type AntsNestApi = {
   configureCloudflare(input: CloudflareSetupInput): Promise<DoctorResult>;
   list(): Promise<TunnelView[]>;
   quick(input: DesktopQuickInput): Promise<TunnelView>;
+  quickFile(input: DesktopFileQuickInput): Promise<TunnelView>;
   createNamed(input: DesktopNamedInput): Promise<TunnelView>;
+  createNamedFile(input: DesktopFileNamedInput): Promise<TunnelView>;
   start(id: string): Promise<TunnelView>;
   stop(id: string): Promise<TunnelView>;
   remove(id: string): Promise<void>;
@@ -132,5 +158,6 @@ export type AntsNestApi = {
   cliInstallationStatus(): Promise<CliInstallationStatus>;
   installCli(): Promise<CliInstallationStatus>;
   uninstallCli(): Promise<CliInstallationStatus>;
+  chooseSharePath(kind: "file" | "folder"): Promise<string | undefined>;
   openExternal(url: string): Promise<void>;
 };

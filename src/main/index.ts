@@ -1,7 +1,7 @@
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { configureCloudflare, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
-import { cloudflareSetupSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState } from "../shared/types";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { configureCloudflare, createDesktopFileNamed, createDesktopFileQuick, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { cloudflareSetupSchema, desktopFileNamedInputSchema, desktopFileQuickInputSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState } from "../shared/types";
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
@@ -131,7 +131,9 @@ function registerIpc() {
     return tunnels.filter((tunnel) => tunnel.id !== remoteTunnelId() && !isRemoteTunnel(tunnel));
   });
   ipcMain.handle("ants:quick", (_event, input) => createDesktopQuick(desktopQuickInputSchema.parse(input)));
+  ipcMain.handle("ants:quick-file", (_event, input) => createDesktopFileQuick(desktopFileQuickInputSchema.parse(input)));
   ipcMain.handle("ants:create-named", (_event, input) => createDesktopNamed(desktopNamedInputSchema.parse(input)));
+  ipcMain.handle("ants:create-named-file", (_event, input) => createDesktopFileNamed(desktopFileNamedInputSchema.parse(input)));
   ipcMain.handle("ants:start", (_event, id: unknown) => startTunnel(String(id)));
   ipcMain.handle("ants:stop", (_event, id: unknown) => stopTunnel(String(id)));
   ipcMain.handle("ants:remove", (_event, id: unknown) => removeTunnel(String(id)));
@@ -147,6 +149,12 @@ function registerIpc() {
     return packagedCliTarget().then((target) => installCli(target));
   });
   ipcMain.handle("ants:uninstall-cli", () => uninstallCli());
+  ipcMain.handle("ants:choose-share-path", async (_event, rawKind: unknown) => {
+    const kind = String(rawKind);
+    if (kind !== "file" && kind !== "folder") throw new Error("Choose either a file or folder");
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: [kind === "file" ? "openFile" : "openDirectory"] });
+    return result.canceled ? undefined : result.filePaths[0];
+  });
   ipcMain.handle("ants:open-external", async (_event, rawUrl: unknown) => {
     const url = new URL(String(rawUrl));
     if (!["https:", "http:"].includes(url.protocol)) throw new Error("Unsupported link protocol");

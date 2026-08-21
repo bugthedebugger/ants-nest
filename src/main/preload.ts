@@ -12,7 +12,9 @@ const api: AntsNestApi = {
   configureCloudflare: (input) => ipcRenderer.invoke("ants:configure-cloudflare", input),
   list: () => ipcRenderer.invoke("ants:list"),
   quick: (input) => ipcRenderer.invoke("ants:quick", input),
+  quickFile: (input) => ipcRenderer.invoke("ants:quick-file", input),
   createNamed: (input) => ipcRenderer.invoke("ants:create-named", input),
+  createNamedFile: (input) => ipcRenderer.invoke("ants:create-named-file", input),
   start: (id) => ipcRenderer.invoke("ants:start", id),
   stop: (id) => ipcRenderer.invoke("ants:stop", id),
   remove: (id) => ipcRenderer.invoke("ants:remove", id),
@@ -26,6 +28,7 @@ const api: AntsNestApi = {
   cliInstallationStatus: () => ipcRenderer.invoke("ants:cli-installation-status"),
   installCli: () => ipcRenderer.invoke("ants:install-cli"),
   uninstallCli: () => ipcRenderer.invoke("ants:uninstall-cli"),
+  chooseSharePath: (kind) => ipcRenderer.invoke("ants:choose-share-path", kind),
   openExternal: (url) => ipcRenderer.invoke("ants:open-external", url),
 };
 

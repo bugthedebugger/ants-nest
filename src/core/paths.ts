@@ -14,6 +14,7 @@ export const paths = {
   logs: () => path.join(dataDirectory(), "logs"),
   cloudflareConfig: () => path.join(dataDirectory(), "cloudflare.json"),
   tokens: () => path.join(dataDirectory(), "tokens"),
+  shares: () => path.join(dataDirectory(), "shares"),
   cloudflaredBinary: () => path.join(dataDirectory(), "bin", process.platform === "win32" ? "cloudflared.exe" : "cloudflared"),
   cloudflaredMetadata: () => path.join(dataDirectory(), "bin", "cloudflared.json"),
 };
