@@ -64,7 +64,7 @@ async function topLevelFiles(directory) {
 function requiredPlatformFiles(platform, version) {
   if (platform === "linux") return ["Ants.Nest.AppImage", "latest-linux.yml"];
   if (platform === "mac") return [`Ants.Nest-${version}-mac-arm64.dmg`, `Ants.Nest-${version}-mac-arm64.zip`, "latest-mac.yml"];
-  if (platform === "windows") return [`Ants.Nest-Setup-${version}-win-x64.exe`, "latest.yml"];
+  if (platform === "windows") return [`Ants.Nest-Setup-${version}-win-x64.exe`, `Ants.Nest-Portable-${version}-win-x64.exe`, "latest.yml"];
   throw new Error(`Unsupported release platform: ${platform}`);
 }
 

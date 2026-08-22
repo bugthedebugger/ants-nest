@@ -24,7 +24,7 @@
     "package": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --publish never && node scripts/prepare-release.mjs",
     "package:linux": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --linux AppImage --x64 --publish never && node scripts/prepare-release.mjs linux",
     "package:mac": "npm run clean && npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --mac dmg zip --arm64 --publish never && node scripts/prepare-release.mjs mac",
-    "package:windows": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --win nsis --x64 --publish never && node scripts/prepare-release.mjs windows",
+    "package:windows": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --win nsis portable --x64 --publish never && node scripts/prepare-release.mjs windows",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root . && node --test scripts/release-tools-tests.mjs",
     "check": "npm run typecheck && npm test && npm run build",
@@ -126,12 +126,21 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "Ants.Nest-Portable-${version}-win-${arch}.${ext}"
     }
   },
   "engines": {

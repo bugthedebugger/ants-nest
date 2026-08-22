@@ -45,6 +45,7 @@ test("stages an allowlisted Linux release and assembles all platforms", async (c
     `Ants.Nest-${version}-mac-arm64.zip`,
     "latest-mac.yml",
     `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
     "latest.yml",
   ]) await fs.writeFile(path.join(collected, name), name);
   const assembled = await assembleReleaseAssets({ input: collected, output: path.join(root, "release-assets"), root });
@@ -67,6 +68,7 @@ test("rejects unexpected files during final assembly", async (context) => {
     `Ants.Nest-${version}-mac-arm64.zip`,
     "latest-mac.yml",
     `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
     "latest.yml",
     "ants-nest-cli.cjs",
     "ants-nest-icon.png",
