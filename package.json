@@ -35,6 +35,7 @@
   "dependencies": {
     "@types/qrcode": "^1.5.6",
     "commander": "^14.0.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
@@ -58,6 +59,11 @@
   "build": {
     "appId": "tools.antsnest.app",
     "productName": "Ants Nest",
+    "publish": {
+      "provider": "github",
+      "owner": "bugthedebugger",
+      "repo": "ants-nest"
+    },
     "directories": {
       "output": "release"
     },
@@ -83,7 +89,8 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.developer-tools"
     },

@@ -30,6 +30,15 @@ const api: AntsNestApi = {
   uninstallCli: () => ipcRenderer.invoke("ants:uninstall-cli"),
   chooseSharePath: (kind) => ipcRenderer.invoke("ants:choose-share-path", kind),
   openExternal: (url) => ipcRenderer.invoke("ants:open-external", url),
+  updateStatus: () => ipcRenderer.invoke("ants:update-status"),
+  checkForUpdate: () => ipcRenderer.invoke("ants:update-check"),
+  downloadUpdate: () => ipcRenderer.invoke("ants:update-download"),
+  installUpdate: () => ipcRenderer.invoke("ants:update-install"),
+  onUpdateState: (callback) => {
+    const listener = (_event: unknown, state: Parameters<typeof callback>[0]) => callback(state);
+    ipcRenderer.on("ants:update-state", listener);
+    return () => ipcRenderer.removeListener("ants:update-state", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("antsNest", api);

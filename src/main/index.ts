@@ -7,6 +7,7 @@ import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
 import { cliInstallationStatus, installCli, probeDesktopCliVersion, uninstallCli, type CliInstallTarget } from "../core/cli-install";
 import { setRemoteAutostart } from "../core/autostart";
+import { checkForAppUpdates, registerUpdateIpc, scheduleUpdateChecks, startAppUpdater } from "../core/app-updater";
 
 const cliArgumentIndex = process.argv.indexOf("--cli");
 if (cliArgumentIndex >= 0) {
@@ -201,6 +202,10 @@ app.whenReady().then(async () => {
   stopStateChangeServer = await startStateChangeServer(notifyRendererStateChanged);
   stopAppControlServer = await startAppControlServer(handleAppControl);
   registerIpc();
+  registerUpdateIpc();
+  startAppUpdater();
+  scheduleUpdateChecks();
+  void checkForAppUpdates().catch(() => undefined);
   if (!backgroundLaunch) createWindow();
   void reconcileExpiryWorkers().catch((error) => console.error("Could not reconcile expiration workers:", error));
   void restoreRemoteAccess()

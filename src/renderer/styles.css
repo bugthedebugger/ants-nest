@@ -45,6 +45,16 @@ nav button span.nav-live { padding: 2px 5px; border: 1px solid #4b4b4b; border-r
 .connection i { width: 6px; height: 6px; border-radius: 50%; background: #555; }
 .connection i.ok { background: #d4d1ca; box-shadow: 0 0 0 3px #d4d1ca12; }
 .app-version { padding: 2px 6px 0; color: #85837d; font: 10px ui-monospace, monospace; }
+.version-row { padding: 2px 6px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.update-button { position: relative; width: 26px; height: 26px; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; background: transparent; color: #85837d; cursor: pointer; flex: none; }
+.update-button:hover { color: #d4d1ca; background: #1b1b1b; }
+.update-button .spin { animation: update-spin 1s linear infinite; }
+@keyframes update-spin { to { transform: rotate(360deg); } }
+.update-button .update-percent { font: 9px ui-monospace, monospace; line-height: 1; }
+.update-button .update-percent small { font-size: 7px; }
+.update-button .notif-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: #e5533f; border: 1.5px solid var(--sidebar); }
+.update-button.ready { color: var(--accent-text); background: var(--accent); }
+.update-button.ready:hover { background: #fff; }
 main { min-width: 0; overflow-y: auto; padding: 44px 46px 54px; }
 main > * { width: min(920px, 100%); margin-left: auto; margin-right: auto; }
 header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }

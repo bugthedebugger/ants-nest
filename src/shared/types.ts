@@ -90,6 +90,14 @@ export type CliInstallationStatus = {
   reason?: string;
 };
 
+export type AppUpdateState = {
+  status: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+  currentVersion?: string | undefined;
+  version?: string | undefined;
+  percent?: number | undefined;
+  error?: string | undefined;
+};
+
 const shareNameSchema = z.string().trim().min(1, "Name is required").max(64).refine((value) => /[a-z0-9]/i.test(value), "Name must include an English letter or number");
 
 export const quickInputSchema = z.object({
@@ -160,4 +168,9 @@ export type AntsNestApi = {
   uninstallCli(): Promise<CliInstallationStatus>;
   chooseSharePath(kind: "file" | "folder"): Promise<string | undefined>;
   openExternal(url: string): Promise<void>;
+  updateStatus(): Promise<AppUpdateState>;
+  checkForUpdate(): Promise<AppUpdateState>;
+  downloadUpdate(): Promise<AppUpdateState>;
+  installUpdate(): Promise<void>;
+  onUpdateState(callback: (state: AppUpdateState) => void): () => void;
 };
