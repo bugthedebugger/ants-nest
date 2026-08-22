@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Command, Copy, FileText, FolderOpen, Globe2, LockKeyhole, MonitorSmartphone, MoreHorizontal, Phone, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
-import type { CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
+import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
 import { formatRemaining } from "../shared/duration";
 import { hostnameFromSubdomain } from "../shared/validation";
 
@@ -34,6 +34,28 @@ function CopyButton({ value }: { value: string }) {
   }}>{copied ? <Check size={15} /> : <Copy size={15} />}</button>;
 }
 
+const updateButtonTitles: Record<AppUpdateState["status"], string> = {
+  idle: "Check for updates",
+  checking: "Checking for updates…",
+  available: "Download update",
+  downloading: "Downloading update…",
+  downloaded: "Restart to install the update",
+  "not-available": "Up to date — check again",
+  error: "Update check failed — retry",
+};
+
+function UpdateButton({ update, busy, onClick }: { update: AppUpdateState; busy: boolean; onClick: () => void }) {
+  const status = busy ? "checking" : update.status;
+  return (
+    <button className={`update-button${status === "downloaded" ? " ready" : ""}`} title={`${updateButtonTitles[status]}${update.version ? ` (v${update.version})` : ""}`} onClick={onClick}>
+      {status === "downloading"
+        ? <span className="update-percent">{Math.min(100, Math.round(update.percent ?? 0))}<small>%</small></span>
+        : <RefreshCw size={13} className={status === "checking" ? "spin" : ""} />}
+      {(status === "available" || status === "downloaded") && <i className="notif-dot" />}
+    </button>
+  );
+}
+
 export function App() {
   const [tunnels, setTunnels] = useState<TunnelView[]>([]);
   const [doctor, setDoctor] = useState<DoctorResult>();
@@ -47,6 +69,8 @@ export function App() {
   const [logs, setLogs] = useState("");
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  const [update, setUpdate] = useState<AppUpdateState>();
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     const [nextTunnels, nextDoctor, nextRemote, nextCliInstallation] = await Promise.all([window.antsNest.list(), window.antsNest.doctor(), window.antsNest.remoteStatus(), window.antsNest.cliInstallationStatus()]);
@@ -55,8 +79,10 @@ export function App() {
   useEffect(() => {
     void refresh().catch((e) => setError(message(e)));
     void window.antsNest.appVersion().then(setAppVersion).catch(() => undefined);
+    void window.antsNest.updateStatus().then(setUpdate).catch(() => undefined);
     return window.antsNest.onStateChanged(() => void refresh().catch(() => undefined));
   }, [refresh]);
+  useEffect(() => window.antsNest.onUpdateState(setUpdate), []);
 
   const live = tunnels.filter((t) => t.status === "online").length;
 
@@ -91,6 +117,22 @@ export function App() {
     });
   }
 
+  async function checkForUpdate() {
+    setUpdateBusy(true);
+    try {
+      const state = await window.antsNest.checkForUpdate();
+      if (state.status === "error") setError(state.error ?? "Could not check for updates");
+    } catch (e) { setError(message(e)); }
+    finally { setUpdateBusy(false); }
+  }
+
+  function onUpdateButtonClick() {
+    const status = updateBusy ? "checking" : update?.status ?? "idle";
+    if (status === "available") void window.antsNest.downloadUpdate().catch((e) => setError(message(e)));
+    else if (status === "downloaded") void window.antsNest.installUpdate().catch((e) => setError(message(e)));
+    else if (status !== "downloading") void checkForUpdate();
+  }
+
   return <div className="app-frame">
     <div className="titlebar"><Logo /><strong>Ants Nest</strong><span>{doctor?.proxyDomain || "Local tunnel manager"}</span></div>
     <div className="shell">
@@ -102,7 +144,10 @@ export function App() {
         </nav>
         <div className="sidebar-bottom">
           <button className="connection" onClick={() => setPage("settings")}><i className={doctor?.installed && doctor?.authenticated ? "ok" : ""} /><span>{doctor?.installed && doctor?.authenticated ? "Cloudflare connected" : "Setup required"}</span></button>
-          <span className="app-version">Ants Nest v{appVersion || "—"}</span>
+          <div className="version-row">
+            <span className="app-version">Ants Nest v{appVersion || "—"}</span>
+            <UpdateButton update={update ?? { status: "idle" }} busy={updateBusy} onClick={onUpdateButtonClick} />
+          </div>
         </div>
       </aside>
 
