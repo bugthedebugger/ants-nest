@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import packageMetadata from "../../package.json";
 import { requestAppControl } from "../core/app-control";
 import { checkCliUpdate, runCliUpdate } from "../core/cli-update";
+import { createUpdateProgressReporter } from "./update-progress";
 import { configureCloudflare, createFileNamed, createFileQuick, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
 import { parseDuration, parseExpirationTime } from "../shared/duration";
 import type { CloudflareSetupInput, RemoteAccessState } from "../shared/types";
@@ -186,7 +187,13 @@ program.command("update")
         ? `Update available: v${packageMetadata.version} → v${release.version}. Run \`ants update\` to install.`
         : `Already up to date (v${packageMetadata.version}).`);
     }
-    const result = await runCliUpdate({ currentVersion: packageMetadata.version, force: options.force });
+    const progress = options.json ? undefined : createUpdateProgressReporter();
+    const result = await runCliUpdate({
+      currentVersion: packageMetadata.version,
+      force: options.force,
+      release,
+      ...(progress ? { onProgress: progress.report } : {}),
+    }).finally(() => progress?.finish());
     if (options.json) return output(result, true);
     if (!result.updated) return output(result.reason ?? "No update was installed.");
     output(`Updated ants CLI v${result.currentVersion} → v${result.latestVersion}`);

@@ -77,12 +77,15 @@ describe("CLI updater", () => {
     const scriptPath = path.join(directory, "cli.cjs");
     await fs.writeFile(scriptPath, "process.stdout.write('1.0.0')");
     const newScript = `process.stdout.write('9.9.9')`;
-    const result = await runCliUpdate({ currentVersion: "1.0.0", fetchImpl: mockFetch(newScript), target: { mode: "repository", scriptPath, assetName: "ants-nest-cli.cjs" } });
+    const progress: string[] = [];
+    const result = await runCliUpdate({ currentVersion: "1.0.0", fetchImpl: mockFetch(newScript), target: { mode: "repository", scriptPath, assetName: "ants-nest-cli.cjs" }, onProgress: (event) => progress.push(event.phase) });
     expect(result).toMatchObject({ updated: true, latestVersion: "9.9.9", targetPath: scriptPath });
     expect(await fs.readFile(scriptPath, "utf8")).toBe(newScript);
     expect((await fs.stat(scriptPath)).mode & 0o777).toBe(0o755);
     await expect(fs.access(`${scriptPath}.bak`)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(fs.readdir(directory)).resolves.toEqual(["cli.cjs"]);
+    expect(progress).toContain("download");
+    expect(progress.slice(-3)).toEqual(["verify", "test", "install"]);
   });
 
   it("rejects a download whose checksum does not match", async () => {
