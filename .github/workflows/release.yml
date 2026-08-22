@@ -1,0 +1,194 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      should_release: ${{ steps.metadata.outputs.should_release }}
+      release_sha: ${{ steps.release_state.outputs.release_sha }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.13.0
+
+      - name: Validate release metadata
+        id: metadata
+        env:
+          PREVIOUS_REF: ${{ github.event.before }}
+        run: node scripts/release-metadata.mjs --previous-ref "$PREVIOUS_REF" --github-output "$GITHUB_OUTPUT"
+
+      - name: Require the default branch
+        if: steps.metadata.outputs.should_release == 'true' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases may only be built from the main branch" >&2
+          exit 1
+
+      - name: Check release and tag state
+        id: release_state
+        if: steps.metadata.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          draft_state="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || true)"
+          if [ "$draft_state" = "true" ]; then
+            release_sha="$(git rev-list -n 1 "$TAG")"
+            echo "Resuming draft $TAG from $release_sha"
+          elif [ "$draft_state" = "false" ]; then
+            echo "Release $TAG is already published; refusing to overwrite it" >&2
+            exit 1
+          elif git show-ref --verify --quiet "refs/tags/$TAG"; then
+            echo "Tag $TAG exists without a GitHub release; refusing to reuse it" >&2
+            exit 1
+          else
+            release_sha="$CURRENT_SHA"
+            echo "Preparing new draft $TAG from $release_sha"
+          fi
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Explain skipped release
+        if: steps.metadata.outputs.should_release != 'true'
+        run: echo "package.json version did not change; no release will be built"
+
+  test:
+    name: Test release commit
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: [gate, test]
+    if: needs.gate.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            cache-path: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
+          - platform: mac
+            os: macos-14
+            cache-path: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
+          - platform: windows
+            os: windows-latest
+            cache-path: |
+              ~/AppData/Local/electron/Cache
+              ~/AppData/Local/electron-builder/Cache
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Cache Electron tooling
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ matrix.cache-path }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+
+      - run: npm ci
+      - run: npm run package:${{ matrix.platform }}
+
+      - name: Upload staged assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create draft release
+    needs: [gate, build]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.13.0
+
+      - name: Download platform assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: collected-artifacts
+          merge-multiple: true
+
+      - name: Validate and checksum assets
+        run: node scripts/assemble-release.mjs collected-artifacts release-assets
+
+      - name: Create or refresh draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
+        run: |
+          draft_state="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || true)"
+          if [ "$draft_state" = "true" ]; then
+            gh release upload "$TAG" release-assets/* --clobber
+          elif [ "$draft_state" = "false" ]; then
+            echo "Release $TAG was published while this workflow was running; refusing to modify it" >&2
+            exit 1
+          else
+            gh release create "$TAG" release-assets/* \
+              --draft \
+              --generate-notes \
+              --title "Ants Nest v$VERSION" \
+              --target "$RELEASE_SHA"
