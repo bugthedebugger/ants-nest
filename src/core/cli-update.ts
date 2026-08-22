@@ -28,6 +28,10 @@ export type CliUpdateResult = {
   reason?: string;
 };
 
+export type CliUpdateProgress =
+  | { phase: "download"; downloadedBytes: number; totalBytes?: number; complete: boolean }
+  | { phase: "verify" | "test" | "install" };
+
 export function normalizeVersion(tag: string) {
   return tag.replace(/^v/i, "");
 }
@@ -90,12 +94,30 @@ export function resolveCliUpdateTarget(options: { argv1?: string; appImage?: str
   return { mode: "repository", scriptPath: path.resolve(scriptPath), assetName: "ants-nest-cli.cjs" };
 }
 
-async function downloadTo(file: string, url: string, fetchImpl: typeof fetch) {
+async function downloadTo(file: string, url: string, fetchImpl: typeof fetch, onProgress?: (progress: CliUpdateProgress) => void) {
   const response = await fetchImpl(url, { headers: { "user-agent": "ants-nest-cli" }, redirect: "follow" });
   if (!response.ok || !response.body) throw new Error(`Downloading the update failed (HTTP ${response.status})`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(file, buffer, { mode: 0o755 });
-  return buffer;
+  const contentLength = Number(response.headers.get("content-length"));
+  const totalBytes = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined;
+  const reader = response.body.getReader();
+  const handle = await fs.open(file, "w", 0o755);
+  const hash = createHash("sha256");
+  let downloadedBytes = 0;
+  onProgress?.({ phase: "download", downloadedBytes, ...(totalBytes ? { totalBytes } : {}), complete: false });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await handle.writeFile(value);
+      hash.update(value);
+      downloadedBytes += value.byteLength;
+      onProgress?.({ phase: "download", downloadedBytes, ...(totalBytes ? { totalBytes } : {}), complete: false });
+    }
+  } finally {
+    await handle.close();
+  }
+  onProgress?.({ phase: "download", downloadedBytes, ...(totalBytes ? { totalBytes } : {}), complete: true });
+  return hash.digest("hex");
 }
 
 async function smokeTest(command: string, args: string[], expectedVersion: string) {
@@ -124,9 +146,10 @@ export async function checkCliUpdate(currentVersion: string, fetchImpl?: typeof 
   return { release, updateAvailable: compareVersions(release.version, currentVersion) > 0 };
 }
 
-export async function runCliUpdate(options: { currentVersion: string; force?: boolean; fetchImpl?: typeof fetch; target?: CliUpdateTarget }): Promise<CliUpdateResult> {
+export async function runCliUpdate(options: { currentVersion: string; force?: boolean; fetchImpl?: typeof fetch; target?: CliUpdateTarget; release?: LatestRelease; onProgress?: (progress: CliUpdateProgress) => void }): Promise<CliUpdateResult> {
   const target = options.target ?? resolveCliUpdateTarget();
-  const { release, updateAvailable } = await checkCliUpdate(options.currentVersion, options.fetchImpl);
+  const release = options.release ?? (await checkCliUpdate(options.currentVersion, options.fetchImpl)).release;
+  const updateAvailable = compareVersions(release.version, options.currentVersion) > 0;
   if (!updateAvailable && !options.force) {
     return { updated: false, currentVersion: options.currentVersion, latestVersion: release.version, reason: "up-to-date" };
   }
@@ -143,15 +166,17 @@ export async function runCliUpdate(options: { currentVersion: string; force?: bo
   await fs.access(targetPath).catch(() => { throw new Error(`Could not find the installed file to replace: ${targetPath}`); });
   const temporaryPath = path.join(directory, `.${path.basename(targetPath)}.update-${process.pid}`);
   try {
-    const buffer = await downloadTo(temporaryPath, downloadUrl, options.fetchImpl ?? fetch);
+    const actualChecksum = await downloadTo(temporaryPath, downloadUrl, options.fetchImpl ?? fetch, options.onProgress);
     const expectedChecksum = release.checksums?.[target.assetName];
     if (expectedChecksum) {
-      const actualChecksum = createHash("sha256").update(buffer).digest("hex");
+      options.onProgress?.({ phase: "verify" });
       if (actualChecksum !== expectedChecksum.toLowerCase()) throw new Error(`Checksum mismatch for ${target.assetName}: expected ${expectedChecksum}, got ${actualChecksum}`);
     }
     await fs.chmod(temporaryPath, 0o755);
+    options.onProgress?.({ phase: "test" });
     if (target.mode === "appimage") await smokeTest(temporaryPath, ["--cli", "--version"], release.version);
     else await smokeTest(process.execPath, [temporaryPath, "--version"], release.version);
+    options.onProgress?.({ phase: "install" });
     await swapFile(targetPath, temporaryPath);
     return { updated: true, currentVersion: options.currentVersion, latestVersion: release.version, targetPath };
   } finally {
