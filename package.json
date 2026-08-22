@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Bug The Debugger",
   "license": "MIT",
