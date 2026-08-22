@@ -192,3 +192,4 @@ jobs:
               --generate-notes \
               --title "Ants Nest v$VERSION" \
               --target "$RELEASE_SHA"
+          fi
