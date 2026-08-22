@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Bug The Debugger",
   "license": "MIT",
@@ -21,16 +21,22 @@
     "dev": "concurrently -k \"vite\" \"npm:dev:main\"",
     "dev:main": "tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts src/core/file-share-worker.ts --format cjs --platform node --external electron --external node:sqlite --watch --onSuccess \"node scripts/start-electron.mjs\"",
     "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts src/core/file-share-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap && node scripts/build-standalone-cli.mjs",
-    "package": "npm run clean:release && npm run build && electron-builder && node scripts/prepare-release.mjs",
+    "package": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --publish never && node scripts/prepare-release.mjs",
+    "package:linux": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --linux AppImage --x64 --publish never && node scripts/prepare-release.mjs linux",
+    "package:mac": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --mac dmg zip --arm64 --publish never && node scripts/prepare-release.mjs mac",
+    "package:windows": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --win nsis --x64 --publish never && node scripts/prepare-release.mjs windows",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root .",
+    "test": "vitest run --root . && node --test scripts/release-tools-tests.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "install:cli": "npm run build && node dist/cli/install-runner.cjs install",
     "install:all": "npm run package && node dist/cli/install-runner.cjs install-all",
     "uninstall:cli": "npm run build && node dist/cli/install-runner.cjs uninstall",
     "uninstall:all": "npm run build && node dist/cli/install-runner.cjs uninstall-all",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "clean:release": "node -e \"require('node:fs').rmSync('release',{recursive:true,force:true})\""
+    "clean:release": "node -e \"require('node:fs').rmSync('release',{recursive:true,force:true})\"",
+    "clean:artifacts": "node -e \"require('node:fs').rmSync('artifacts',{recursive:true,force:true})\"",
+    "release:metadata": "node scripts/release-metadata.mjs",
+    "release:assemble": "node scripts/assemble-release.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -81,22 +87,44 @@
     "linux": {
       "artifactName": "Ants.Nest.${ext}",
       "target": [
-        "AppImage"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "category": "Development",
       "icon": "assets/icon.png",
       "syncDesktopName": true
     },
     "mac": {
+      "artifactName": "Ants.Nest-${version}-mac-${arch}.${ext}",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.developer-tools"
     },
     "win": {
+      "artifactName": "Ants.Nest-Setup-${version}-win-${arch}.${ext}",
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {

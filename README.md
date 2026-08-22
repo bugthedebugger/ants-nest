@@ -90,6 +90,36 @@ Create a platform package under `release/`:
 npm run package
 ```
 
+Platform-specific release commands also stage only the public assets under `artifacts/<platform>/`:
+
+```bash
+npm run package:linux
+npm run package:mac
+npm run package:windows
+```
+
+## Releases
+
+A push to `main` that increases the version in `package.json` starts the release workflow. Keep the lockfile synchronized by using npm for the bump:
+
+```bash
+npm version patch --no-git-tag-version
+```
+
+The workflow validates the version change, runs the checks, builds an x64 Linux AppImage, an Apple-silicon DMG and updater ZIP, an x64 Windows NSIS installer, and the standalone CLI. It creates a draft GitHub release only after every platform succeeds; publishing the draft remains a manual step.
+
+You can exercise the release logic locally without pushing:
+
+```bash
+npm run release:metadata -- --previous-version 0.3.0
+npm test
+npm run package:linux
+env -u ELECTRON_RUN_AS_NODE -u FONTCONFIG_FILE ./artifacts/linux/Ants.Nest.AppImage --cli --version
+node artifacts/linux/ants-nest-cli.cjs --version
+```
+
+Use the version immediately before the current `package.json` value for `--previous-version`; the JSON result should contain `"shouldRelease": true`. Native DMG and NSIS packaging still require macOS and Windows respectively, so those two final installers are produced by their GitHub-hosted runners.
+
 Install only the repository CLI:
 
 ```bash

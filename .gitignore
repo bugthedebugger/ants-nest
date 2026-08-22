@@ -1,6 +1,9 @@
 node_modules/
 dist/
 release/
+artifacts/
+collected-artifacts/
+release-assets/
 screenshots/
 coverage/
 
