@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, Globe2, LockKeyhole, MonitorSmartphone, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowUpRight, Check, ChevronDown, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, LockKeyhole, MonitorSmartphone, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
 import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
@@ -32,6 +32,35 @@ function CopyButton({ value }: { value: string }) {
   return <button className="icon-button" title="Copy link" onClick={() => {
     void navigator.clipboard.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); });
   }}>{copied ? <Check size={15} /> : <Copy size={15} />}</button>;
+}
+
+type SelectChoice = { value: string; label: string; description?: string };
+
+function SelectMenu({ value, options, icon, placement = "down", onChange }: { value: string; options: SelectChoice[]; icon: ReactNode; placement?: "up" | "down"; onChange(value: string): void }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0]!;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return <div className={`select-menu ${placement} ${open ? "open" : ""}`} ref={menuRef}>
+    <button type="button" className="select-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{icon}<span className="select-current"><strong>{selected.label}</strong>{selected.description && <small>{selected.description}</small>}</span><ChevronDown className="select-chevron" size={14}/></button>
+    {open && <div className="select-options" role="listbox">{options.map((option) => <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "selected" : ""} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}><span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>{option.value === value && <Check size={14}/>}</button>)}</div>}
+  </div>;
 }
 
 const updateButtonTitles: Record<AppUpdateState["status"], string> = {
@@ -274,15 +303,15 @@ function TunnelModal({ installed, proxyDomain, busy, onClose, onComplete }: { in
   }
   return <div className="backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><form className="modal" onSubmit={submit}>
     <div className="modal-head"><div><h2>New share</h2><p>Publish a local service, file, or folder on an available hostname.</p></div><button type="button" className="icon-button close" onClick={onClose}><X size={18}/></button></div>
-    <div className="tabs"><button type="button" className={kind === "quick" ? "active" : ""} onClick={() => { setKind("quick"); if (!expirationMode) setExpirationMode("3600"); }}><Zap size={14}/><strong>Quick share</strong><small>expires</small></button><button type="button" className={kind === "named" ? "active" : ""} onClick={() => { setKind("named"); setExpirationMode(""); }}><Globe2 size={14}/><strong>Named tunnel</strong><small>until released</small></button></div>
-    <div className="subtabs"><button type="button" className={sourceKind === "service" ? "active" : ""} onClick={() => setSourceKind("service")}><Radio size={13}/> Local service</button><button type="button" className={sourceKind === "files" ? "active" : ""} onClick={() => setSourceKind("files")}><FolderOpen size={13}/> File or folder</button></div>
+    <div className="source-tabs" aria-label="What to share"><button type="button" className={sourceKind === "service" ? "active" : ""} onClick={() => setSourceKind("service")}><Radio size={13}/> Local service</button><button type="button" className={sourceKind === "files" ? "active" : ""} onClick={() => setSourceKind("files")}><FolderOpen size={13}/> File or folder</button></div>
     {!installed && <div className="warning">cloudflared is not installed. Complete Cloudflare Setup to install it.</div>}
     <label>Name<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Docs preview" required /></label>
     <label>Public hostname<div className="input-prefix hostname-input"><span>https://</span><input value={subdomain} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} placeholder="preview" pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} autoCapitalize="none" spellCheck={false} required /><span className="domain-suffix">.{proxyDomain || "configure-domain-first"}</span></div><small>Choose an unused direct subdomain. Existing DNS records are never replaced.</small></label>
     <label>Description<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this link exposes and who it is for" maxLength={240} required /><small>Shown in the desktop app, CLI, and phone dashboard.</small></label>
-    {sourceKind === "service" ? <label>Local service<div className="input-prefix"><span>URL</span><input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="3000 or http://localhost:3000" required /></div><small>A port is automatically expanded to localhost.</small></label> : <><label>File or folder path<div className="input-prefix path-input"><span>PATH</span><input value={sharedPath} onChange={(e) => setSharedPath(e.target.value)} placeholder="/home/me/project/file.html" required /><div className="path-actions"><button type="button" onClick={() => void window.antsNest.chooseSharePath("file").then((value) => value && setSharedPath(value))}>File</button><button type="button" onClick={() => void window.antsNest.chooseSharePath("folder").then((value) => value && setSharedPath(value))}>Folder</button></div></div><small>Ants Nest serves this path itself. Folders show index.html when present, or a directory browser otherwise.</small></label><label className="token-toggle"><input type="checkbox" checked={tokenRequired} onChange={(event) => setTokenRequired(event.target.checked)}/><span><strong>Require an access token</strong><small>Recommended and enabled by default. The share URL includes the token; the bare hostname asks visitors to enter it.</small></span></label></>}
-    {kind === "quick" && <label>Required expiration<div className="select-wrap"><Clock3 size={14}/><select value={expirationMode} onChange={(event) => setExpirationMode(event.target.value)}><optgroup label="Duration"><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="14400">4 hours</option><option value="86400">24 hours</option></optgroup><option value="exact">At a specific date & time…</option></select></div>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>{expirationMode === "exact" ? "Uses this computer’s local timezone." : "Every Quick Share is stopped by a background watchdog even when Ants Nest is closed."}</small></label>}
-    {kind === "named" && <label>Release hostname<div className="select-wrap"><Clock3 size={14}/><select value={expirationMode} onChange={(event) => setExpirationMode(event.target.value)}><option value="">When manually stopped or removed</option><optgroup label="Automatic expiration"><option value="900">After 15 minutes</option><option value="3600">After 1 hour</option><option value="14400">After 4 hours</option><option value="86400">After 24 hours</option></optgroup><option value="exact">At a specific date & time…</option></select></div>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>Stopping, removing, or expiration deletes the owned DNS record and Cloudflare Tunnel.</small></label>}
+    {sourceKind === "service" ? <label>Local service<div className="input-prefix"><span>URL</span><input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="3000 or http://localhost:3000" required /></div><small>A port is automatically expanded to localhost.</small></label> : <><label>File or folder path<div className="input-prefix path-input"><span>PATH</span><input value={sharedPath} onChange={(e) => setSharedPath(e.target.value)} placeholder="/home/me/project/file.html" required /><div className="path-actions"><button type="button" onClick={() => void window.antsNest.chooseSharePath("file").then((value) => value && setSharedPath(value))}><FileText size={13}/> Choose file</button><button type="button" onClick={() => void window.antsNest.chooseSharePath("folder").then((value) => value && setSharedPath(value))}><FolderOpen size={13}/> Choose folder</button></div></div><small>Paste a path or choose what to share. Folders serve index.html when present, or show a directory browser.</small></label><button type="button" className={`token-toggle ${tokenRequired ? "active" : ""}`} role="switch" aria-checked={tokenRequired} onClick={() => setTokenRequired((required) => !required)}><span className="token-copy"><strong>Require an access token</strong><small>Recommended and enabled by default. The share URL includes the token; the bare hostname asks visitors to enter it.</small></span><span className="token-switch" aria-hidden="true"><i/></span></button></>}
+    <label>Lifetime<SelectMenu value={kind} icon={<Zap size={14}/>} options={[{ value: "quick", label: "Quick share", description: "Expires automatically" }, { value: "named", label: "Named tunnel", description: "Until released" }]} onChange={(value) => { const nextKind = value as "quick" | "named"; setKind(nextKind); setExpirationMode(nextKind === "quick" ? "3600" : ""); }}/><small>Quick shares clean themselves up. Named tunnels remain available until released.</small></label>
+    {kind === "quick" && <label>Required expiration<SelectMenu placement="up" value={expirationMode} icon={<Clock3 size={14}/>} options={[{ value: "900", label: "15 minutes" }, { value: "3600", label: "1 hour" }, { value: "14400", label: "4 hours" }, { value: "86400", label: "24 hours" }, { value: "exact", label: "Specific date & time", description: "Choose an exact cutoff" }]} onChange={setExpirationMode}/>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>{expirationMode === "exact" ? "Uses this computer’s local timezone." : "Every Quick Share is stopped by a background watchdog even when Ants Nest is closed."}</small></label>}
+    {kind === "named" && <label>Release hostname<SelectMenu placement="up" value={expirationMode} icon={<Clock3 size={14}/>} options={[{ value: "", label: "Manual release", description: "Until stopped or removed" }, { value: "900", label: "After 15 minutes" }, { value: "3600", label: "After 1 hour" }, { value: "14400", label: "After 4 hours" }, { value: "86400", label: "After 24 hours" }, { value: "exact", label: "Specific date & time", description: "Choose an exact cutoff" }]} onChange={setExpirationMode}/>{expirationMode === "exact" && <div className="datetime-wrap"><Clock3 size={14}/><input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></div>}<small>Stopping, removing, or expiration deletes the owned DNS record and Cloudflare Tunnel.</small></label>}
     <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !installed || !proxyDomain}>{busy ? <><RefreshCw className="spin" size={15}/> Connecting…</> : <><Radio size={15}/> Create & start</>}</button></div>
   </form></div>;
 }
