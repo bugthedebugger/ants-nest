@@ -17,6 +17,7 @@ There is no Ants Nest account or hosted backend. The desktop app, CLI, Cloudflar
 - Install just the CLI or the complete AppImage + CLI with one command.
 - Share one WAL-enabled SQLite state store between Electron and the CLI, with real-time desktop refresh.
 - Install and update the official `cloudflared` binary during setup after SHA-256 verification.
+- Self-update the CLI with `ants update` and receive desktop app updates in one click, both verified against GitHub Releases.
 - Never replace an existing DNS record.
 
 ## How hostnames work
@@ -213,6 +214,18 @@ ants remove <profile-id>
 ```
 
 Use IDs from JSON output when automating. Names are accepted but can become ambiguous. `stop` and `remove` both release managed Cloudflare resources; repeated cleanup may report that the profile no longer exists.
+
+### Update the CLI
+
+`ants update` compares the running version against the latest GitHub release, then downloads the new CLI, verifies its SHA-256 digest against the release's `checksums.txt`, smoke-tests it, and atomically swaps it in place with rollback:
+
+```bash
+ants update --check   # report whether an update is available
+ants update           # install the latest version
+ants update --json    # machine-readable result
+```
+
+When the launcher is backed by the AppImage, `ants update` replaces that AppImage so the desktop app updates together with it. npm-managed installs print the matching `npm install -g` command instead of touching files. The desktop app also checks GitHub Releases on its own and offers updates through an icon button at the bottom of the sidebar.
 
 See [.agents/skills/ants-nest-cli/SKILL.md](.agents/skills/ants-nest-cli/SKILL.md) for the agent workflow bundled with this repository.
 

@@ -1,6 +1,6 @@
 ---
 name: ants-nest-cli
-description: Publish and manage local services, files, and folders with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, share a file or folder without creating a separate server, create a temporary review link, create an intentional named tunnel, manage the Remote access dashboard or its paired devices, inspect active Ants Nest tunnels, retrieve connector logs, or clean up a previously created share.
+description: Publish and manage local services, files, and folders with the Ants Nest CLI. Use when an agent needs to expose a localhost port or URL, share a file or folder without creating a separate server, create a temporary review link, create an intentional named tunnel, manage the Remote access dashboard or its paired devices, inspect active Ants Nest tunnels, retrieve connector logs, clean up a previously created share, or check for and install CLI updates.
 ---
 
 # Ants Nest CLI
@@ -121,6 +121,16 @@ ants remove <profile-id>
 Quick shares also clean themselves up at expiration through a detached watchdog.
 
 Cloudflare may briefly report active connections after the local connector exits. Ants Nest clears stale connector records for its dedicated tunnel and retries cleanup automatically. If retries are exhausted, local access is already offline and the profile remains available; wait briefly, then retry the same `ants stop <profile-id>` command.
+
+## Update the CLI
+
+When the user asks to update the CLI or reports a missing command or flag that a newer version provides, check first:
+
+```bash
+ants update --check --json   # { currentVersion, latestVersion, updateAvailable }
+```
+
+Then run `ants update` only when the user asked for the update or confirmed it. The command downloads the new CLI, verifies its SHA-256 digest against the release checksums, smoke-tests it, and swaps it in place; the running process keeps its old code until restarted. Do not run `ants update` unprompted during unrelated tasks.
 
 ## Safety rules
 
