@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Command, Copy, FileText, FolderOpen, Globe2, LockKeyhole, MonitorSmartphone, MoreHorizontal, Phone, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
+import { ArrowUpRight, Check, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, Globe2, LockKeyhole, MonitorSmartphone, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
 import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
@@ -162,7 +162,7 @@ export function App() {
         {tunnels.length > 0 && <section className="summary-bar"><span><b>{live}</b> live</span><i/><span><b>{tunnels.filter(t => t.kind === "quick").length}</b> quick</span><i/><span><b>{tunnels.filter(t => t.kind === "named").length}</b> named</span></section>}
 
         <section className="tunnel-section">
-          <div className="section-title"><div><h2>All tunnels</h2><p>Changes from the CLI appear here automatically.</p></div></div>
+          <div className="section-title"><span className="kicker">All tunnels</span><p>Changes from the CLI appear here automatically.</p></div>
           {!tunnels.length ? <Empty /> : <div className="tunnel-list">
           {tunnels.map((tunnel) => <TunnelRow key={tunnel.id} tunnel={tunnel} busy={busy === tunnel.id}
             onToggle={() => void action(tunnel.id, () => tunnel.status === "online" ? window.antsNest.stop(tunnel.id) : window.antsNest.start(tunnel.id))}
@@ -194,14 +194,14 @@ function RemotePage({ state, qrCode, busy, installed, proxyDomain, error, onDism
   return <div className="page remote-page">
     <header><div><h1>Remote access</h1><p>Securely control Ants Nest from your other devices.</p></div>{state.enabled && <button className="remote-stop" disabled={busy === "remote-stop"} onClick={onStop}>End remote access</button>}</header>
     {error && <div className="error"><span>{error}</span><button onClick={onDismissError}><X size={15}/></button></div>}
-    {!state.enabled ? <section className="remote-enable-panel"><div className="remote-hero-icon"><MonitorSmartphone size={26}/></div><h2>Access Ants Nest from anywhere</h2><p>Creates a secure dashboard at antsnest.{proxyDomain || "your-domain.com"}. Every browser must pair with a one-time code and can be revoked individually.</p><button className="primary" disabled={!installed || busy === "remote"} onClick={onEnable}>{busy === "remote" ? <><RefreshCw className="spin" size={15}/> Enabling…</> : <><MonitorSmartphone size={15}/> Enable remote access</>}</button></section> : <div className="remote-page-grid"><section className="page-panel remote-pairing-panel">
-    <div className="panel-heading"><div><h2>Pair a device</h2><p>Scan this one-time code from the device you want to authorize.</p></div></div>
-    {state.pairingUrl ? <><div className="qr-wrap">{qrCode ? <img src={qrCode} alt="Remote access pairing QR code"/> : <RefreshCw className="spin"/>}</div><div className="pairing-url"><span>{state.publicUrl}</span><CopyButton value={state.pairingUrl}/></div><p className="single-use"><ShieldCheck size={13}/> Single-use code — it expires as soon as one browser pairs.</p></> : <div className="new-pairing"><QrCode size={28}/><h3>Pair another device</h3><p>Generate a fresh one-time QR code. Existing authorized devices remain connected.</p><button className="primary" disabled={busy === "pairing"} onClick={onNewPairing}>{busy === "pairing" ? "Generating…" : "Generate pairing code"}</button></div>}
+    {!state.enabled ? <section className="remote-enable-panel"><h2>Access Ants Nest from anywhere</h2><p>Creates a secure dashboard at antsnest.{proxyDomain || "your-domain.com"}. Every browser must pair with a one-time code and can be revoked individually.</p><button className="primary" disabled={!installed || busy === "remote"} onClick={onEnable}>{busy === "remote" ? <><RefreshCw className="spin" size={15}/> Enabling…</> : <><MonitorSmartphone size={15}/> Enable remote access</>}</button></section> : <div className="remote-page-grid"><section className="remote-pairing-panel">
+    <div className="panel-heading"><div><span className="kicker">Pairing</span><h2>Pair a device</h2><p>Scan this one-time code from the device you want to authorize.</p></div></div>
+    {state.pairingUrl ? <><div className="qr-wrap">{qrCode ? <img src={qrCode} alt="Remote access pairing QR code"/> : <RefreshCw className="spin"/>}</div><div className="pairing-url"><span>{state.publicUrl}</span><CopyButton value={state.pairingUrl}/></div><p className="single-use"><ShieldCheck size={13}/> Single-use code — it expires as soon as one browser pairs.</p></> : <div className="new-pairing"><QrCode size={18}/><h3>Pair another device</h3><p>Generate a fresh one-time QR code. Existing authorized devices remain connected.</p><button className="primary" disabled={busy === "pairing"} onClick={onNewPairing}>{busy === "pairing" ? "Generating…" : "Generate pairing code"}</button></div>}
     {state.pairingUrl && <button className="secondary open-pairing" onClick={() => void window.antsNest.openExternal(state.pairingUrl!)}>Open pairing page <ArrowUpRight size={14}/></button>}
-    </section><section className="page-panel devices-panel">
+    </section><section className="devices-panel">
     <div className="device-heading"><div><strong>Authorized devices</strong><span>{state.devices.length}</span></div>{state.devices.length > 0 && <button disabled={busy === "revoke-all"} onClick={onRevokeAll}>Revoke all</button>}</div>
-    <div className="device-list">{state.devices.length ? state.devices.map((device) => <div className="device" key={device.id}><div className="device-icon"><Phone size={15}/></div><div><strong>{device.name}</strong><span>Last active {relativeTime(device.lastSeenAt)}</span></div><button disabled={busy === `revoke-${device.id}`} onClick={() => onRevoke(device.id)}>Revoke</button></div>) : <div className="no-devices">No devices paired yet.</div>}</div>
-    <div className="security-note"><ShieldCheck size={18}/><div><strong>Per-device access</strong><p>Each browser receives a unique token after pairing. Revocation is immediate, and that browser must scan a newly generated code to return.</p></div></div>
+    <div className="device-list">{state.devices.length ? state.devices.map((device) => <div className="device" key={device.id}><div><strong>{device.name}</strong><span>Last active {relativeTime(device.lastSeenAt)}</span></div><button disabled={busy === `revoke-${device.id}`} onClick={() => onRevoke(device.id)}>Revoke</button></div>) : <div className="no-devices">No devices paired yet.</div>}</div>
+    <div className="security-note"><ShieldCheck size={16}/><div><strong>Per-device access</strong><p>Each browser receives a unique token after pairing. Revocation is immediate, and that browser must scan a newly generated code to return.</p></div></div>
     </section></div>}
   </div>;
 }
@@ -215,8 +215,8 @@ function SettingsPage({ configured, busy, cliBusy, cliInstallation, error, confi
     event.preventDefault();
     void onSave({ proxyDomain, zoneId, accountId, apiToken });
   }
-  return <div className="page settings-page"><header><div><h1>Settings</h1><p>Manage the Cloudflare connection shared by the app and CLI.</p></div></header><div className="settings-stack"><form className="page-panel settings-form" onSubmit={submit}>
-    <div className="panel-heading"><div className="kind-icon named"><Cloud size={19}/></div><div><h2>{configured ? "Cloudflare configuration" : "Configure Cloudflare"}</h2><p>{configured ? `Connected to ${configuredDomain || "your Cloudflare domain"}. Enter all four values to replace the configuration.` : "Validates API access and installs the latest official cloudflared release."}</p></div></div>
+  return <div className="page settings-page"><div className="settings-inner"><header><div><h1>Settings</h1><p>Manage the Cloudflare connection shared by the app and CLI.</p></div></header><div className="settings-stack"><form className="settings-form" onSubmit={submit}>
+    <div className="panel-heading"><div><span className="kicker">Cloudflare</span><h2>{configured ? "Configuration" : "Configure Cloudflare"}</h2><p>{configured ? `Connected to ${configuredDomain || "your Cloudflare domain"}. Enter all four values to replace the configuration.` : "Validates API access and installs the latest official cloudflared release."}</p></div></div>
     {error && <div className="error setup-error"><span>{error}</span><button type="button" onClick={onDismissError}><X size={15}/></button></div>}
     {configured && <div className="warning configured-warning"><Check size={15}/> Saving replaces the current configuration after the new values are validated.</div>}
     <label><code>CLOUDFLARE_PROXY_DOMAIN</code><input autoFocus value={proxyDomain} onChange={(event) => setProxyDomain(event.target.value)} placeholder="tunnels.example.com" required /></label>
@@ -225,22 +225,21 @@ function SettingsPage({ configured, busy, cliBusy, cliInstallation, error, confi
     <label><code>CLOUDFLARE_API_TOKEN</code><input type="password" autoComplete="off" value={apiToken} onChange={(event) => setApiToken(event.target.value)} placeholder="Token with Tunnel Edit + DNS Edit" required /><small>Stored locally in ~/.ants-nest/cloudflare.json with user-only permissions.</small></label>
     <div className="token-permissions"><ShieldCheck size={16}/><div><strong>Required token permissions</strong><p>Account · Cloudflare Tunnel · Edit<br/>Zone · DNS · Edit</p></div></div>
     <div className="form-actions"><button className="primary" disabled={busy}>{busy ? <><RefreshCw className="spin" size={15}/> Setting up…</> : <><Check size={15}/> Install, validate & save</>}</button></div>
-  </form><section className="page-panel cli-install-panel"><div className="panel-heading"><div className="kind-icon named"><Terminal size={19}/></div><div><h2>Agent CLI</h2><p>Install the <code>ants</code> and <code>ants-nest</code> commands for every local terminal and coding agent.</p></div></div>
+  </form><section className="cli-install-panel"><div className="panel-heading"><div><span className="kicker">Agent CLI</span><h2>Command line</h2><p>Install the <code>ants</code> and <code>ants-nest</code> commands for every local terminal and coding agent.</p></div></div>
     {!cliInstallation?.supported ? <div className="cli-install-note">{cliInstallation?.reason || "CLI installation is available from the packaged Linux AppImage."}</div> : <>
       <div className="cli-install-status"><i className={cliInstallation.installed ? "ok" : ""}/><div><strong>{cliInstallation.installed ? `CLI ${cliInstallation.version || ""} installed` : "CLI not installed"}</strong><span>{cliInstallation.installed ? `${cliInstallation.commands.join(" and ")} are in ${cliInstallation.binDirectory}` : `Installs commands into ${cliInstallation.binDirectory}`}</span>{cliInstallation.installed && !cliInstallation.onPath && <small>Add this directory to PATH, then open a new terminal.</small>}</div></div>
       <div className="form-actions">{cliInstallation.installed && <button type="button" className="secondary" disabled={cliBusy === "uninstall-cli"} onClick={() => void onUninstallCli()}>{cliBusy === "uninstall-cli" ? "Removing…" : "Uninstall CLI"}</button>}<button type="button" className="primary" disabled={cliBusy === "install-cli"} onClick={() => void onInstallCli()}>{cliBusy === "install-cli" ? <><RefreshCw className="spin" size={15}/> Installing…</> : <><Terminal size={15}/> {cliInstallation.installed ? "Update CLI" : "Install CLI"}</>}</button></div>
     </>}
-  </section></div></div>;
+  </section></div></div></div>;
 }
 
 function Empty() {
-  return <div className="empty"><div className="empty-mark"><Cloud size={20}/></div><h3>No tunnels yet</h3><p>Create one with the button above or ask an agent to run the Ants Nest CLI.</p></div>;
+  return <div className="empty"><h3>No tunnels yet</h3><p>Create one with the button above or ask an agent to run the Ants Nest CLI.</p></div>;
 }
 
 function TunnelRow({ tunnel, busy, onToggle, onLogs, onRemove }: { tunnel: TunnelView; busy: boolean; onToggle(): void; onLogs(): void; onRemove(): void }) {
   const online = tunnel.status === "online";
   return <article className="tunnel-row">
-    <div className={`kind-icon ${tunnel.kind}`} >{tunnel.kind === "quick" ? <Zap size={18}/> : <Globe2 size={18}/>}</div>
     <div className="tunnel-content">
       <div className="tunnel-heading"><h3>{tunnel.name}</h3><span className={`pill ${tunnel.status}`}><i />{tunnel.status}</span><span className="kind-label">{tunnel.kind}</span></div>
       <div className="url">{tunnel.publicUrl ? <><button onClick={() => void window.antsNest.openExternal(tunnel.publicUrl!)}>{tunnel.publicUrl.replace("https://", "")}<ArrowUpRight size={13}/></button><CopyButton value={tunnel.publicUrl}/></> : <span>Link appears when started</span>}</div>
@@ -275,8 +274,8 @@ function TunnelModal({ installed, proxyDomain, busy, onClose, onComplete }: { in
   }
   return <div className="backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><form className="modal" onSubmit={submit}>
     <div className="modal-head"><div><h2>New share</h2><p>Publish a local service, file, or folder on an available hostname.</p></div><button type="button" className="icon-button close" onClick={onClose}><X size={18}/></button></div>
-    <div className="kind-switch"><button type="button" className={kind === "quick" ? "active" : ""} onClick={() => { setKind("quick"); if (!expirationMode) setExpirationMode("3600"); }}><Zap size={15}/><span><strong>Quick share</strong><small>Expiration required</small></span></button><button type="button" className={kind === "named" ? "active" : ""} onClick={() => { setKind("named"); setExpirationMode(""); }}><Globe2 size={15}/><span><strong>Named tunnel</strong><small>Runs until released</small></span></button></div>
-    <div className="source-switch"><button type="button" className={sourceKind === "service" ? "active" : ""} onClick={() => setSourceKind("service")}><Radio size={14}/> Local service</button><button type="button" className={sourceKind === "files" ? "active" : ""} onClick={() => setSourceKind("files")}><FolderOpen size={14}/> File or folder</button></div>
+    <div className="tabs"><button type="button" className={kind === "quick" ? "active" : ""} onClick={() => { setKind("quick"); if (!expirationMode) setExpirationMode("3600"); }}><Zap size={14}/><strong>Quick share</strong><small>expires</small></button><button type="button" className={kind === "named" ? "active" : ""} onClick={() => { setKind("named"); setExpirationMode(""); }}><Globe2 size={14}/><strong>Named tunnel</strong><small>until released</small></button></div>
+    <div className="subtabs"><button type="button" className={sourceKind === "service" ? "active" : ""} onClick={() => setSourceKind("service")}><Radio size={13}/> Local service</button><button type="button" className={sourceKind === "files" ? "active" : ""} onClick={() => setSourceKind("files")}><FolderOpen size={13}/> File or folder</button></div>
     {!installed && <div className="warning">cloudflared is not installed. Complete Cloudflare Setup to install it.</div>}
     <label>Name<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Docs preview" required /></label>
     <label>Public hostname<div className="input-prefix hostname-input"><span>https://</span><input value={subdomain} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} placeholder="preview" pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} autoCapitalize="none" spellCheck={false} required /><span className="domain-suffix">.{proxyDomain || "configure-domain-first"}</span></div><small>Choose an unused direct subdomain. Existing DNS records are never replaced.</small></label>
@@ -289,5 +288,5 @@ function TunnelModal({ installed, proxyDomain, busy, onClose, onComplete }: { in
 }
 
 function LogsModal({ tunnel, logs, onClose }: { tunnel: TunnelView; logs: string; onClose(): void }) {
-  return <div className="backdrop"><div className="modal logs-modal"><div className="modal-head"><div className="kind-icon quick"><Command size={19}/></div><div><h2>{tunnel.name} logs</h2><p>Latest cloudflared output</p></div><button className="icon-button close" onClick={onClose}><X size={18}/></button></div><pre>{logs}</pre><div className="modal-actions"><button className="secondary" onClick={onClose}>Close</button></div></div></div>;
+  return <div className="backdrop"><div className="modal logs-modal"><div className="modal-head"><div><h2>{tunnel.name} logs</h2><p>Latest cloudflared output</p></div><button className="icon-button close" onClick={onClose}><X size={18}/></button></div><pre>{logs}</pre><div className="modal-actions"><button className="secondary" onClick={onClose}>Close</button></div></div></div>;
 }
