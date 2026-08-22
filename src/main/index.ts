@@ -7,6 +7,7 @@ import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
 import { cliInstallationStatus, installCli, probeDesktopCliVersion, uninstallCli, type CliInstallTarget } from "../core/cli-install";
 import { setRemoteAutostart } from "../core/autostart";
+import { isPortableWindows, portableExecutablePath } from "../core/portable";
 import { checkForAppUpdates, registerUpdateIpc, scheduleUpdateChecks, startAppUpdater } from "../core/app-updater";
 
 const cliArgumentIndex = process.argv.indexOf("--cli");
@@ -71,7 +72,17 @@ async function performAppControl(request: AppControlRequest): Promise<RemoteAcce
 
 async function configureRemoteAutostart(enabled: boolean) {
   if (process.platform === "linux") await setRemoteAutostart(enabled, process.env.APPIMAGE);
-  else app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ["--background"] : [] });
+  else {
+    // Portable Windows builds run from a temporary extraction directory that
+    // electron-builder deletes on exit, so the login item must point at the
+    // outer portable executable instead of process.execPath.
+    const executablePath = portableExecutablePath();
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      ...(executablePath ? { path: executablePath } : {}),
+      args: enabled ? ["--background"] : [],
+    });
+  }
 }
 
 async function enableRemoteAccess() {
@@ -112,7 +123,8 @@ async function packagedCliTarget(): Promise<CliInstallTarget> {
     return { mode: "appimage", executablePath, fontconfigPath, version };
   }
   if (!app.isPackaged) throw new Error("Open the packaged desktop app, or run npm run install:cli from the repository");
-  return { mode: "desktop", executablePath: process.execPath, version: await probeDesktopCliVersion(process.execPath) };
+  const executablePath = portableExecutablePath() ?? process.execPath;
+  return { mode: "desktop", executablePath, version: await probeDesktopCliVersion(executablePath) };
 }
 
 async function syncManagedCliWithDesktop() {

@@ -106,7 +106,7 @@ A push to `main` that increases the version in `package.json` starts the release
 npm version patch --no-git-tag-version
 ```
 
-The workflow validates the version change, runs the checks, builds an x64 Linux AppImage, an Apple-silicon DMG and updater ZIP, an x64 Windows NSIS installer, and the standalone CLI. It creates a draft GitHub release only after every platform succeeds; publishing the draft remains a manual step.
+The workflow validates the version change, runs the checks, builds an x64 Linux AppImage, an Apple-silicon DMG and updater ZIP, an x64 Windows NSIS installer and portable executable, and the standalone CLI. It creates a draft GitHub release only after every platform succeeds and verifies that both Windows executables are present; publishing the draft remains a manual step.
 
 You can exercise the release logic locally without pushing:
 

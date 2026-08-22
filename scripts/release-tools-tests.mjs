@@ -45,11 +45,36 @@ test("stages an allowlisted Linux release and assembles all platforms", async (c
     `Ants.Nest-${version}-mac-arm64.zip`,
     "latest-mac.yml",
     `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
     "latest.yml",
   ]) await fs.writeFile(path.join(collected, name), name);
   const assembled = await assembleReleaseAssets({ input: collected, output: path.join(root, "release-assets"), root });
   assert.ok(assembled.files.includes("checksums.txt"));
   assert.match(await fs.readFile(path.join(assembled.output, "checksums.txt"), "utf8"), /  ants-nest-cli\.cjs$/m);
+});
+
+test("stages both Windows executables for the release pipeline", async (context) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "ants-release-windows-"));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const version = "3.4.5";
+  await fs.mkdir(path.join(root, "release"), { recursive: true });
+  await fs.writeFile(path.join(root, "package.json"), JSON.stringify({ version }));
+  await fs.writeFile(path.join(root, "package-lock.json"), JSON.stringify({ version, packages: { "": { version } } }));
+  for (const name of [
+    `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Setup-${version}-win-x64.exe.blockmap`,
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
+    "latest.yml",
+    "builder-debug.yml",
+  ]) await fs.writeFile(path.join(root, "release", name), name);
+
+  const staged = await stageReleaseAssets({ platform: "windows", root });
+  assert.deepEqual(staged.files, [
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
+    `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Setup-${version}-win-x64.exe.blockmap`,
+    "latest.yml",
+  ]);
 });
 
 test("rejects unexpected files during final assembly", async (context) => {
@@ -67,6 +92,7 @@ test("rejects unexpected files during final assembly", async (context) => {
     `Ants.Nest-${version}-mac-arm64.zip`,
     "latest-mac.yml",
     `Ants.Nest-Setup-${version}-win-x64.exe`,
+    `Ants.Nest-Portable-${version}-win-x64.exe`,
     "latest.yml",
     "ants-nest-cli.cjs",
     "ants-nest-icon.png",

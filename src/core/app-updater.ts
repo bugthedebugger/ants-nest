@@ -1,6 +1,8 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import type { AppUpdateState } from "../shared/types";
+import { compareVersions, fetchLatestRelease } from "./cli-update";
+import { isPortableWindows } from "./portable";
 
 let state: AppUpdateState = { status: "idle" };
 let started = false;
@@ -30,6 +32,7 @@ export function currentUpdateState(): AppUpdateState {
 export function startAppUpdater() {
   if (started || !app.isPackaged) return;
   started = true;
+  if (isPortableWindows()) return;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null;
@@ -51,8 +54,24 @@ export function scheduleUpdateChecks() {
   timer.unref?.();
 }
 
+async function checkLatestRelease() {
+  const release = await fetchLatestRelease();
+  return { release, updateAvailable: compareVersions(release.version, app.getVersion()) > 0 };
+}
+
 export async function checkForAppUpdates(): Promise<AppUpdateState> {
   if (!app.isPackaged) return state;
+  if (isPortableWindows()) {
+    setState({ status: "checking", error: undefined });
+    try {
+      const { release, updateAvailable } = await checkLatestRelease();
+      if (updateAvailable) setState({ status: "available", version: release.version, percent: undefined, error: undefined });
+      else setState({ status: "not-available", version: release.version, error: undefined });
+    } catch (error) {
+      setState({ status: "error", error: updateErrorMessage(error) });
+    }
+    return state;
+  }
   try {
     await autoUpdater.checkForUpdates();
   } catch (error) {
@@ -64,12 +83,28 @@ export async function checkForAppUpdates(): Promise<AppUpdateState> {
 export async function downloadAppUpdate(): Promise<AppUpdateState> {
   if (!app.isPackaged) throw new Error("Updates are available in the packaged app");
   if (state.status === "downloaded") return state;
+  if (isPortableWindows()) {
+    // electron-updater cannot install over a portable build, so hand the
+    // download to the browser and let the user replace the executable.
+    const { release } = await checkLatestRelease();
+    if (!(compareVersions(release.version, app.getVersion()) > 0)) {
+      setState({ status: "not-available", version: release.version, error: undefined });
+      return state;
+    }
+    const assetName = `Ants.Nest-Portable-${release.version}-win-x64.exe`;
+    const url = release.assets[assetName];
+    if (!url) throw new Error(`Release v${release.version} does not include ${assetName}`);
+    await shell.openExternal(url);
+    setState({ status: "idle" });
+    return state;
+  }
   await autoUpdater.downloadUpdate();
   return state;
 }
 
 export function installAppUpdate() {
   if (!app.isPackaged) throw new Error("Updates are available in the packaged app");
+  if (isPortableWindows()) throw new Error("Download the new portable build to update");
   setImmediate(() => {
     app.removeAllListeners("window-all-closed");
     BrowserWindow.getAllWindows().forEach((window) => window.removeAllListeners("closed"));

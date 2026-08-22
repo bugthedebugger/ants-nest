@@ -94,7 +94,7 @@ export function resolveCliUpdateTarget(options: { argv1?: string; appImage?: str
   return { mode: "repository", scriptPath: path.resolve(scriptPath), assetName: "ants-nest-cli.cjs" };
 }
 
-async function downloadTo(file: string, url: string, fetchImpl: typeof fetch, onProgress?: (progress: CliUpdateProgress) => void) {
+export async function downloadTo(file: string, url: string, fetchImpl: typeof fetch, onProgress?: (progress: CliUpdateProgress) => void) {
   const response = await fetchImpl(url, { headers: { "user-agent": "ants-nest-cli" }, redirect: "follow" });
   if (!response.ok || !response.body) throw new Error(`Downloading the update failed (HTTP ${response.status})`);
   const contentLength = Number(response.headers.get("content-length"));
