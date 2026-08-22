@@ -1,7 +1,7 @@
 {
   "name": "ants-nest",
   "desktopName": "ants-nest.desktop",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A local-first Cloudflare Tunnel desktop app and agent-friendly CLI",
   "author": "Bug The Debugger",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "build": "npm run clean && vite build && tsup src/main/index.ts src/main/preload.ts src/cli/index.ts src/cli/install-runner.ts src/core/expiry-worker.ts src/core/file-share-worker.ts --format cjs --platform node --external electron --external node:sqlite --sourcemap && node scripts/build-standalone-cli.mjs",
     "package": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --publish never && node scripts/prepare-release.mjs",
     "package:linux": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --linux AppImage --x64 --publish never && node scripts/prepare-release.mjs linux",
-    "package:mac": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --mac dmg zip --arm64 --publish never && node scripts/prepare-release.mjs mac",
+    "package:mac": "npm run clean && npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --mac dmg zip --arm64 --publish never && node scripts/prepare-release.mjs mac",
     "package:windows": "npm run clean:release && npm run clean:artifacts && npm run build && electron-builder --win nsis --x64 --publish never && node scripts/prepare-release.mjs windows",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root . && node --test scripts/release-tools-tests.mjs",
@@ -100,6 +100,7 @@
     },
     "mac": {
       "artifactName": "Ants.Nest-${version}-mac-${arch}.${ext}",
+      "icon": "assets/icon.svg",
       "target": [
         {
           "target": "dmg",
@@ -118,6 +119,7 @@
     },
     "win": {
       "artifactName": "Ants.Nest-Setup-${version}-win-${arch}.${ext}",
+      "icon": "assets/icon.svg",
       "target": [
         {
           "target": "nsis",
