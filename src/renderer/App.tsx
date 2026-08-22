@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowUpRight, Check, ChevronDown, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, LockKeyhole, MonitorSmartphone, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Terminal, Trash2, X, Zap } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, LockKeyhole, Monitor, MonitorSmartphone, Moon, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Sun, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
 import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
@@ -8,6 +8,7 @@ import { hostnameFromSubdomain } from "../shared/validation";
 
 type Page = "tunnels" | "remote" | "settings";
 type Modal = "tunnel" | "logs" | null;
+type ThemePreference = "system" | "light" | "dark";
 
 function message(error: unknown) {
   if (error instanceof Error) return error.message.replace(/^Error invoking remote method '[^']+': /, "");
@@ -100,6 +101,10 @@ export function App() {
   const [error, setError] = useState<string>();
   const [update, setUpdate] = useState<AppUpdateState>();
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [theme, setTheme] = useState<ThemePreference>(() => {
+    const saved = localStorage.getItem("ants-nest-theme");
+    return saved === "light" || saved === "dark" ? saved : "system";
+  });
 
   const refresh = useCallback(async () => {
     const [nextTunnels, nextDoctor, nextRemote, nextCliInstallation] = await Promise.all([window.antsNest.list(), window.antsNest.doctor(), window.antsNest.remoteStatus(), window.antsNest.cliInstallationStatus()]);
@@ -112,6 +117,18 @@ export function App() {
     return window.antsNest.onStateChanged(() => void refresh().catch(() => undefined));
   }, [refresh]);
   useEffect(() => window.antsNest.onUpdateState(setUpdate), []);
+  useEffect(() => {
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      const resolved = theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+    };
+    applyTheme();
+    localStorage.setItem("ants-nest-theme", theme);
+    systemTheme.addEventListener("change", applyTheme);
+    return () => systemTheme.removeEventListener("change", applyTheme);
+  }, [theme]);
 
   const live = tunnels.filter((t) => t.status === "online").length;
 
@@ -207,7 +224,7 @@ export function App() {
           onRevokeAll={() => void action("revoke-all", async () => setRemote(await window.antsNest.revokeAllRemoteDevices()))}
           onStop={() => void action("remote-stop", async () => setRemote(await window.antsNest.stopRemote()))} />}
 
-        {page === "settings" && <SettingsPage configured={doctor?.authenticated ?? false} busy={busy === "setup"} cliBusy={busy} cliInstallation={cliInstallation} error={error} configuredDomain={doctor?.proxyDomain}
+        {page === "settings" && <SettingsPage theme={theme} onThemeChange={setTheme} configured={doctor?.authenticated ?? false} busy={busy === "setup"} cliBusy={busy} cliInstallation={cliInstallation} error={error} configuredDomain={doctor?.proxyDomain}
           onDismissError={() => setError(undefined)} onSave={async (input) => { await action("setup", () => window.antsNest.configureCloudflare(input)); }}
           onInstallCli={async () => { await action("install-cli", async () => setCliInstallation(await window.antsNest.installCli())); }}
           onUninstallCli={async () => { await action("uninstall-cli", async () => setCliInstallation(await window.antsNest.uninstallCli())); }} />}
@@ -235,7 +252,7 @@ function RemotePage({ state, qrCode, busy, installed, proxyDomain, error, onDism
   </div>;
 }
 
-function SettingsPage({ configured, busy, cliBusy, cliInstallation, error, configuredDomain, onDismissError, onSave, onInstallCli, onUninstallCli }: { configured: boolean; busy: boolean; cliBusy?: string | undefined; cliInstallation?: CliInstallationStatus | undefined; error?: string | undefined; configuredDomain?: string | undefined; onDismissError(): void; onSave(input: CloudflareSetupInput): Promise<void>; onInstallCli(): Promise<void>; onUninstallCli(): Promise<void> }) {
+function SettingsPage({ theme, configured, busy, cliBusy, cliInstallation, error, configuredDomain, onThemeChange, onDismissError, onSave, onInstallCli, onUninstallCli }: { theme: ThemePreference; configured: boolean; busy: boolean; cliBusy?: string | undefined; cliInstallation?: CliInstallationStatus | undefined; error?: string | undefined; configuredDomain?: string | undefined; onThemeChange(theme: ThemePreference): void; onDismissError(): void; onSave(input: CloudflareSetupInput): Promise<void>; onInstallCli(): Promise<void>; onUninstallCli(): Promise<void> }) {
   const [proxyDomain, setProxyDomain] = useState("");
   const [zoneId, setZoneId] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -244,7 +261,7 @@ function SettingsPage({ configured, busy, cliBusy, cliInstallation, error, confi
     event.preventDefault();
     void onSave({ proxyDomain, zoneId, accountId, apiToken });
   }
-  return <div className="page settings-page"><div className="settings-inner"><header><div><h1>Settings</h1><p>Manage the Cloudflare connection shared by the app and CLI.</p></div></header><div className="settings-stack"><form className="settings-form" onSubmit={submit}>
+  return <div className="page settings-page"><div className="settings-inner"><header><div><h1>Settings</h1><p>Manage appearance, Cloudflare, and the agent CLI.</p></div></header><div className="settings-stack"><section className="appearance-panel"><div className="panel-heading"><div><span className="kicker">Appearance</span><h2>Theme</h2><p>Use your system preference or choose a theme for Ants Nest.</p></div></div><div className="theme-options" role="group" aria-label="Theme"><button type="button" className={theme === "system" ? "active" : ""} aria-pressed={theme === "system"} onClick={() => onThemeChange("system")}><Monitor size={16}/><span><strong>System</strong><small>Match your device</small></span>{theme === "system" && <Check size={14}/>}</button><button type="button" className={theme === "light" ? "active" : ""} aria-pressed={theme === "light"} onClick={() => onThemeChange("light")}><Sun size={16}/><span><strong>Light</strong><small>Always light</small></span>{theme === "light" && <Check size={14}/>}</button><button type="button" className={theme === "dark" ? "active" : ""} aria-pressed={theme === "dark"} onClick={() => onThemeChange("dark")}><Moon size={16}/><span><strong>Dark</strong><small>Always dark</small></span>{theme === "dark" && <Check size={14}/>}</button></div></section><form className="settings-form" onSubmit={submit}>
     <div className="panel-heading"><div><span className="kicker">Cloudflare</span><h2>{configured ? "Configuration" : "Configure Cloudflare"}</h2><p>{configured ? `Connected to ${configuredDomain || "your Cloudflare domain"}. Enter all four values to replace the configuration.` : "Validates API access and installs the latest official cloudflared release."}</p></div></div>
     {error && <div className="error setup-error"><span>{error}</span><button type="button" onClick={onDismissError}><X size={15}/></button></div>}
     {configured && <div className="warning configured-warning"><Check size={15}/> Saving replaces the current configuration after the new values are validated.</div>}

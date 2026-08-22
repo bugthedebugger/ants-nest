@@ -88,6 +88,8 @@ Do not expose `tokenFile`, `shareConfigFile`, connector tokens, or Cloudflare cr
 
 Remote commands talk to the Ants Nest background service so the CLI, desktop UI, and paired Remote access dashboard share one live server, SQLite device registry, and revocation state. Once Remote access is enabled, closing the desktop window leaves this service running and a managed login autostart entry restores it after reboot. If the service was explicitly quit, ask the user to open Ants Nest first.
 
+Remote access is independent from ordinary shares and app windows. Never disable it, stop or kill its background service or connector, remove its profile, or terminate its processes as incidental cleanup. This includes broad requests such as “clean up,” “stop the app,” or “stop all processes.” Run `ants remote disable` or otherwise terminate Remote access only when the user explicitly asks to disable, stop, or kill **Remote access itself**. When cleaning up a share, target only that share’s full profile ID and leave Remote access untouched.
+
 ```bash
 ants remote status --json
 ants remote enable --json
@@ -141,3 +143,4 @@ Then run `ants update` only when the user asked for the update or confirmed it. 
 - Never use `--api-token` in automation. If explicitly authorized to configure, prefer environment variables or `--api-token-stdin`.
 - Never attempt to replace an occupied hostname. Ants Nest deliberately has no override flag.
 - Do not bypass the CLI suffix rules. In Electron or an authorized Remote access dashboard, the user chooses only the first-level subdomain label; Ants Nest appends the configured base domain.
+- Treat Remote access as persistent user state, not a disposable process. Never stop or disable it unless the user explicitly names Remote access as the target.
