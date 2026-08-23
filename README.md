@@ -108,6 +108,15 @@ npm version patch --no-git-tag-version
 
 The workflow validates the version change, runs the checks, builds an x64 Linux AppImage, an Apple-silicon DMG and updater ZIP, an x64 Windows NSIS installer and portable executable, and the standalone CLI. It creates a draft GitHub release only after every platform succeeds and verifies that both Windows executables are present; publishing the draft remains a manual step.
 
+The macOS app is ad-hoc signed because the project does not have an Apple Developer ID, and CI verifies that signature before uploading the DMG. Apple does not notarize ad-hoc-signed apps, so Gatekeeper quarantines the app after an internet download. After verifying the DMG against the release's `checksums.txt`, drag Ants Nest to Applications and remove quarantine before opening it:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Ants Nest.app"
+open "/Applications/Ants Nest.app"
+```
+
+Only use this workaround for an Ants Nest DMG whose checksum you have verified. A normal click-to-open installation without this step requires a paid Apple Developer Program membership, a Developer ID Application certificate, and Apple notarization.
+
 You can exercise the release logic locally without pushing:
 
 ```bash
