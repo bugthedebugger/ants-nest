@@ -138,6 +138,12 @@ jobs:
       - run: npm ci
       - run: npm run package:${{ matrix.platform }}
 
+      - name: Verify macOS ad-hoc signature
+        if: matrix.platform == 'mac'
+        run: |
+          app_path="release/mac-arm64/Ants Nest.app"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+
       - name: Upload staged assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

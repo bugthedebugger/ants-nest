@@ -101,6 +101,9 @@
     "mac": {
       "artifactName": "Ants.Nest-${version}-mac-${arch}.${ext}",
       "icon": "assets/icon.svg",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false,
       "target": [
         {
           "target": "dmg",
