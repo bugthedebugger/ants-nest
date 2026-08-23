@@ -30,6 +30,7 @@ const api: AntsNestApi = {
   uninstallCli: () => ipcRenderer.invoke("ants:uninstall-cli"),
   chooseSharePath: (kind) => ipcRenderer.invoke("ants:choose-share-path", kind),
   openExternal: (url) => ipcRenderer.invoke("ants:open-external", url),
+  setTitleBarTheme: (theme) => ipcRenderer.send("ants:set-title-bar-theme", theme),
   updateStatus: () => ipcRenderer.invoke("ants:update-status"),
   checkForUpdate: () => ipcRenderer.invoke("ants:update-check"),
   downloadUpdate: () => ipcRenderer.invoke("ants:update-download"),

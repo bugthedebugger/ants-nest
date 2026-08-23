@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { ArrowUpRight, Check, ChevronDown, CircleStop, Clock3, Cloud, Copy, FileText, FolderOpen, LockKeyhole, Monitor, MonitorSmartphone, Moon, MoreHorizontal, Play, Plus, QrCode, Radio, RefreshCw, Settings2, ShieldCheck, Sun, Terminal, Trash2, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import appIconUrl from "../../assets/icon.png";
-import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, TunnelView } from "../shared/types";
+import type { AppUpdateState, CliInstallationStatus, CloudflareSetupInput, DoctorResult, RemoteAccessState, ResolvedTheme, TunnelView } from "../shared/types";
 import { formatRemaining } from "../shared/duration";
 import { hostnameFromSubdomain } from "../shared/validation";
 
@@ -120,9 +120,10 @@ export function App() {
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = () => {
-      const resolved = theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+      const resolved: ResolvedTheme = theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
       document.documentElement.dataset.theme = resolved;
       document.documentElement.style.colorScheme = resolved;
+      window.antsNest.setTitleBarTheme(resolved);
     };
     applyTheme();
     localStorage.setItem("ants-nest-theme", theme);

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { configureCloudflare, createDesktopFileNamed, createDesktopFileQuick, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
-import { cloudflareSetupSchema, desktopFileNamedInputSchema, desktopFileQuickInputSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState } from "../shared/types";
+import { cloudflareSetupSchema, desktopFileNamedInputSchema, desktopFileQuickInputSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState, type ResolvedTheme } from "../shared/types";
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
 import { startAppControlServer, type AppControlRequest } from "../core/app-control";
@@ -24,6 +24,10 @@ let stopAppControlServer: (() => Promise<void>) | undefined;
 let appControlQueue = Promise.resolve();
 const backgroundLaunch = process.argv.includes("--background");
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const titleBarThemes: Record<ResolvedTheme, { color: string; symbolColor: string }> = {
+  dark: { color: "#0b0b0b", symbolColor: "#efede7" },
+  light: { color: "#f8f7f4", symbolColor: "#1d1d1b" },
+};
 
 if (!hasSingleInstanceLock) app.quit();
 app.on("second-instance", (_event, argv) => {
@@ -136,6 +140,12 @@ async function syncManagedCliWithDesktop() {
 }
 
 function registerIpc() {
+  ipcMain.on("ants:set-title-bar-theme", (event, theme: unknown) => {
+    if (process.platform === "darwin" || (theme !== "light" && theme !== "dark")) return;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) return;
+    window.setTitleBarOverlay({ ...titleBarThemes[theme], height: 40 });
+  });
   ipcMain.handle("ants:app-version", () => app.getVersion());
   ipcMain.handle("ants:doctor", () => doctor());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
@@ -182,7 +192,7 @@ function createWindow() {
     minWidth: 920,
     minHeight: 620,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-    ...(process.platform !== "darwin" ? { titleBarOverlay: { color: "#101010", symbolColor: "#d8d6d0", height: 40 } } : {}),
+    ...(process.platform !== "darwin" ? { titleBarOverlay: { ...titleBarThemes.dark, height: 40 } } : {}),
     autoHideMenuBar: true,
     backgroundColor: "#0b0b0b",
     show: false,
