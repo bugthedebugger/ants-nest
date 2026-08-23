@@ -36,11 +36,11 @@ body { margin: 0; min-width: 900px; min-height: 100vh; overflow: hidden; backgro
 button, input, select { font: inherit; }
 button { color: inherit; }
 .app-frame { min-height: 100vh; background: var(--bg); }
-.titlebar { height: 40px; padding: 0 150px 0 14px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); background: var(--bg); -webkit-app-region: drag; user-select: none; }
+.titlebar { height: 40px; padding: 0 150px 0 14px; display: flex; align-items: center; gap: 9px; background: var(--bg); -webkit-app-region: drag; user-select: none; }
 .titlebar .logo { width: 22px; height: 22px; border-radius: 6px; }
 .titlebar strong { font-size: 13px; font-weight: 650; }
 .titlebar > span { color: var(--faint); font-size: 13px; margin-left: 4px; }
-.shell { display: grid; grid-template-columns: 226px 1fr; height: calc(100vh - 40px); }
+.shell { display: grid; grid-template-columns: 226px 1fr; height: calc(100vh - 40px); border-top: 1px solid var(--line); }
 aside { display: flex; flex-direction: column; padding: 22px 12px 16px; border-right: 1px solid var(--line); background: var(--sidebar); }
 .logo { width: 27px; height: 27px; border-radius: 8px; display: block; object-fit: contain; flex: none; }
 nav { display: grid; gap: 4px; }
