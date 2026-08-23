@@ -142,6 +142,7 @@ export type FileQuickInput = z.input<typeof fileQuickInputSchema>;
 export type FileNamedInput = z.input<typeof fileNamedInputSchema>;
 export type DesktopFileQuickInput = z.input<typeof desktopFileQuickInputSchema>;
 export type DesktopFileNamedInput = z.input<typeof desktopFileNamedInputSchema>;
+export type ResolvedTheme = "light" | "dark";
 
 export type AntsNestApi = {
   onStateChanged(callback: () => void): () => void;
@@ -168,6 +169,7 @@ export type AntsNestApi = {
   uninstallCli(): Promise<CliInstallationStatus>;
   chooseSharePath(kind: "file" | "folder"): Promise<string | undefined>;
   openExternal(url: string): Promise<void>;
+  setTitleBarTheme(theme: ResolvedTheme): void;
   updateStatus(): Promise<AppUpdateState>;
   checkForUpdate(): Promise<AppUpdateState>;
   downloadUpdate(): Promise<AppUpdateState>;

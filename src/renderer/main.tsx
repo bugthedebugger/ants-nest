@@ -9,5 +9,6 @@ const initialTheme = savedTheme === "light" || savedTheme === "dark"
   : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 document.documentElement.dataset.theme = initialTheme;
 document.documentElement.style.colorScheme = initialTheme;
+window.antsNest.setTitleBarTheme(initialTheme);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
