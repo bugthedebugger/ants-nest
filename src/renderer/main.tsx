@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
 
+if (navigator.userAgent.includes("Macintosh")) {
+  document.documentElement.classList.add("platform-macos");
+}
+
 const savedTheme = localStorage.getItem("ants-nest-theme");
 const initialTheme = savedTheme === "light" || savedTheme === "dark"
   ? savedTheme

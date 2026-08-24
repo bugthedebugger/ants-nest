@@ -37,6 +37,7 @@ button, input, select { font: inherit; }
 button { color: inherit; }
 .app-frame { min-height: 100vh; background: var(--bg); }
 .titlebar { height: 40px; padding: 0 150px 0 14px; display: flex; align-items: center; gap: 9px; background: var(--bg); -webkit-app-region: drag; user-select: none; }
+.platform-macos .titlebar { padding-left: 84px; padding-right: 14px; }
 .titlebar .logo { width: 22px; height: 22px; border-radius: 6px; }
 .titlebar strong { font-size: 13px; font-weight: 650; }
 .titlebar > span { color: var(--faint); font-size: 13px; margin-left: 4px; }
