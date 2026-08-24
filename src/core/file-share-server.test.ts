@@ -35,7 +35,10 @@ describe("file share server", () => {
 
     const bare = await fetch(base);
     expect(bare.status).toBe(401);
-    expect(await bare.text()).toContain("Token required");
+    const authPage = await bare.text();
+    expect(authPage).toContain("Token required");
+    expect(authPage).toContain("location.hash.slice(1)");
+    expect(authPage).toContain("history.replaceState");
 
     const authorized = await fetch(`${base}/?token=abcdef`, { redirect: "manual" });
     expect(authorized.status).toBe(303);

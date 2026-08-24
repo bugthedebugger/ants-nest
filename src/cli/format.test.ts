@@ -6,7 +6,7 @@ const tunnel: TunnelView = {
   id: "506a4e8a-0000-0000-0000-000000000000", profileId: "506a4e8a-0000-0000-0000-000000000000",
   name: "Neon grid demo", description: "Retro neon-grid static demo page shared directly from disk",
   kind: "quick", origin: "http://127.0.0.1:36779", sharedPath: "/a/very/long/path/to/the/demo-folder",
-  tokenRequired: true, status: "failed", publicUrl: "https://neon-grid-demo-quick.example.com/?token=abcdefghijklmnopqrstuvwxyz",
+  tokenRequired: true, status: "failed", publicUrl: "https://neon-grid-demo-quick.example.com/#token=abcdefghijklmnopqrstuvwxyz",
   error: "Tunnel cleanup is taking longer than expected", createdAt: "2026-08-21T00:00:00.000Z",
 };
 
