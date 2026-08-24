@@ -91,7 +91,7 @@ export type CliInstallationStatus = {
 };
 
 export type AppUpdateState = {
-  status: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+  status: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "manual" | "error";
   currentVersion?: string | undefined;
   version?: string | undefined;
   percent?: number | undefined;

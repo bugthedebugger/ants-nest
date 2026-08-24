@@ -108,7 +108,7 @@ npm version patch --no-git-tag-version
 
 The workflow validates the version change, runs the checks, builds an x64 Linux AppImage, an Apple-silicon DMG and updater ZIP, an x64 Windows NSIS installer and portable executable, and the standalone CLI. It creates a draft GitHub release only after every platform succeeds and verifies that both Windows executables are present; publishing the draft remains a manual step.
 
-The macOS app is ad-hoc signed because the project does not have an Apple Developer ID, and CI verifies that signature before uploading the DMG. Apple does not notarize ad-hoc-signed apps, so Gatekeeper quarantines the app after an internet download. After verifying the DMG against the release's `checksums.txt`, drag Ants Nest to Applications and remove quarantine before opening it:
+The macOS app is ad-hoc signed because the project does not have an Apple Developer ID, and CI verifies that signature before uploading the DMG. Squirrel.Mac cannot automatically replace an ad-hoc-signed app, so the in-app update button opens the matching DMG for manual installation. Apple also does not notarize ad-hoc-signed apps, so Gatekeeper quarantines the app after an internet download. After verifying the DMG against the release's `checksums.txt`, drag Ants Nest to Applications and remove quarantine before opening it:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Ants Nest.app"
@@ -264,7 +264,7 @@ ants update           # install the latest version
 ants update --json    # machine-readable result
 ```
 
-When the launcher is backed by the AppImage, `ants update` replaces that AppImage so the desktop app updates together with it. npm-managed installs print the matching `npm install -g` command instead of touching files. The desktop app also checks GitHub Releases on its own and offers updates through an icon button at the bottom of the sidebar.
+When the launcher is backed by the AppImage, `ants update` replaces that AppImage so the desktop app updates together with it. npm-managed installs print the matching `npm install -g` command instead of touching files. The desktop app also checks GitHub Releases on its own and offers updates through an icon button at the bottom of the sidebar; ad-hoc-signed macOS builds open the DMG for manual installation.
 
 See [.agents/skills/ants-nest-cli/SKILL.md](.agents/skills/ants-nest-cli/SKILL.md) for the agent workflow bundled with this repository.
 
