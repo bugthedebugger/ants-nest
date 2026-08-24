@@ -213,7 +213,7 @@ ants share --path ./dist \
   --json
 ```
 
-File and folder shares require a random token by default. Their `publicUrl` includes `?token=...` and is the link to send to the intended recipient. Opening the bare hostname, or using an invalid token, does not expose any file: it shows an Ants Nest token-entry page instead. After successful verification, Ants Nest stores authorization in a secure, HTTP-only cookie and removes the token from the browser address bar. Folder shares serve `index.html` when one exists and otherwise show a simple directory browser.
+File and folder shares require a random token by default. Their `publicUrl` includes `#token=...` and is the link to send to the intended recipient. The URL fragment keeps the token intact when links are shared through apps and is exchanged in the browser without sending it in the initial request. Opening the bare hostname, or using an invalid token, does not expose any file: it shows an Ants Nest token-entry page instead. After successful verification, Ants Nest stores authorization in a secure, HTTP-only cookie and removes the token from the browser address bar. Folder shares serve `index.html` when one exists and otherwise show a simple directory browser.
 
 The Electron app and paired Remote access dashboard expose the same choice between a local service and a file/folder path. Both accept only the first-level subdomain label and append the configured Cloudflare domain. File and folder mode enables token verification by default, with an explicit opt-out for intentionally public content.
 

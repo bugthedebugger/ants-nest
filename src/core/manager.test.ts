@@ -95,7 +95,7 @@ describe("tunnel manager", () => {
     expect(started.sharedPath).toBe(file);
     expect(started.tokenRequired).toBe(true);
     expect(started.baseUrl).toBe("https://file-preview-quick.tunnels.example.com");
-    expect(started.publicUrl).toMatch(/^https:\/\/file-preview-quick\.tunnels\.example\.com\/\?token=[A-Za-z0-9_-]{32}$/);
+    expect(started.publicUrl).toMatch(/^https:\/\/file-preview-quick\.tunnels\.example\.com\/#token=[A-Za-z0-9_-]{32}$/);
     expect(started.tokenFile).toBeUndefined();
     expect(started.shareConfigFile).toBeUndefined();
     expect(isRunning(started.fileServerPid)).toBe(true);

@@ -339,7 +339,7 @@ export async function startTunnel(idOrName: string): Promise<TunnelView> {
       if (profile.sharedPath && profile.tokenRequired && profile.shareConfigFile) {
         const config = JSON.parse(await fs.readFile(profile.shareConfigFile, "utf8")) as { token?: string };
         if (!config.token) throw new Error("This protected file share is missing its access token");
-        starting.publicUrl = `${baseUrl}/?token=${encodeURIComponent(config.token)}`;
+        starting.publicUrl = `${baseUrl}/#token=${encodeURIComponent(config.token)}`;
       } else starting.publicUrl = baseUrl;
     }
     await updateState((current) => {
