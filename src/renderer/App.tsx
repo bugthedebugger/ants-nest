@@ -70,6 +70,7 @@ const updateButtonTitles: Record<AppUpdateState["status"], string> = {
   available: "Download update",
   downloading: "Downloading update…",
   downloaded: "Restart to install the update",
+  manual: "Installer opened — install the update manually",
   "not-available": "Up to date — check again",
   error: "Update check failed — retry",
 };
@@ -77,11 +78,12 @@ const updateButtonTitles: Record<AppUpdateState["status"], string> = {
 function UpdateButton({ update, busy, onClick }: { update: AppUpdateState; busy: boolean; onClick: () => void }) {
   const status = busy ? "checking" : update.status;
   return (
-    <button className={`update-button${status === "downloaded" ? " ready" : ""}`} title={`${updateButtonTitles[status]}${update.version ? ` (v${update.version})` : ""}`} onClick={onClick}>
+    <button className={`update-button${status === "downloaded" || status === "manual" ? " ready" : ""}`} title={`${updateButtonTitles[status]}${update.version ? ` (v${update.version})` : ""}`} onClick={onClick}>
       {status === "downloading"
         ? <span className="update-percent">{Math.min(100, Math.round(update.percent ?? 0))}<small>%</small></span>
+        : status === "manual" ? <ArrowUpRight size={13} />
         : <RefreshCw size={13} className={status === "checking" ? "spin" : ""} />}
-      {(status === "available" || status === "downloaded") && <i className="notif-dot" />}
+      {(status === "available" || status === "downloaded" || status === "manual") && <i className="notif-dot" />}
     </button>
   );
 }
@@ -177,6 +179,7 @@ export function App() {
     const status = updateBusy ? "checking" : update?.status ?? "idle";
     if (status === "available") void window.antsNest.downloadUpdate().catch((e) => setError(message(e)));
     else if (status === "downloaded") void window.antsNest.installUpdate().catch((e) => setError(message(e)));
+    else if (status === "manual") void window.antsNest.downloadUpdate().catch((e) => setError(message(e)));
     else if (status !== "downloading") void checkForUpdate();
   }
 
