@@ -116,10 +116,10 @@ button.secondary:hover { color: #fff; border-color: #565656; }
 .pill.failed i { background: transparent; border: 1px dashed #66645e; }
 .kind-label { color: #77756f; font: 10px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .url { min-width: 0; height: 25px; display: flex; align-items: center; margin: 6px 0 1px; }
-.url > button { min-width: 0; max-width: 100%; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; display: flex; align-items: center; gap: 5px; background: transparent; color: #e2dfd8; font: 13px ui-monospace, monospace; cursor: pointer; }
-.url > button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.url > button:not(.icon-button) { min-width: 0; max-width: 100%; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; display: flex; align-items: center; gap: 5px; background: transparent; color: #e2dfd8; font: 13px ui-monospace, monospace; cursor: pointer; }
+.url > button:not(.icon-button):hover { text-decoration: underline; text-underline-offset: 3px; }
 .url > span { color: #908e87; font-size: 12px; }
-.url .icon-button { margin-left: 3px; flex: none; width: 26px; height: 26px; }
+.url .icon-button { margin-left: 3px; flex: none; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; }
 .tunnel-content > p { max-width: 720px; margin: 3px 0 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #9b9993; font-size: 13px; }
 .tunnel-meta { display: flex; align-items: center; gap: 8px; color: #85837d; font: 11px ui-monospace, monospace; }
 .tunnel-meta i { width: 3px; height: 3px; border-radius: 50%; background: #454545; }
@@ -204,6 +204,9 @@ button.secondary:hover { color: #fff; border-color: #565656; }
 .modal-actions { margin-top: 26px; padding: 16px 24px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
 .logs-modal { width: min(760px, 100%); padding-top: 28px; }
 .logs-modal pre { height: 360px; margin: 0 24px; padding: 14px 0; overflow: auto; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: #bbb9b3; font: 12px/1.65 ui-monospace, monospace; white-space: pre-wrap; }
+.share-qr-modal { width: min(390px, 100%); }
+.share-qr-body { padding: 0 24px; }
+.share-qr-wrap { width: 260px; height: 260px; margin-top: 0; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
