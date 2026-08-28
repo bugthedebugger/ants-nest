@@ -28,9 +28,40 @@ function wrap(action: () => Promise<void>) {
   });
 }
 
+async function terminalQr(value: string) {
+  return QRCode.toString(value, { type: "terminal", small: true, errorCorrectionLevel: "M" });
+}
+
+async function shareQrOutput(url: string, json?: boolean) {
+  const qr = await terminalQr(url);
+  if (json) return output({ url, qr }, true);
+  console.log(`Share URL:\n${url}\n\n${qr}`);
+}
+
+async function tunnelOutput(tunnel: Awaited<ReturnType<typeof startTunnel>>, options: { json?: boolean; qr?: boolean }, urlOnly = false) {
+  if (options.qr) {
+    if (!tunnel.publicUrl) throw new Error("This tunnel does not have a public URL yet");
+    const qr = await terminalQr(tunnel.publicUrl);
+    if (options.json) return output({ ...tunnel, qr }, true);
+    console.log(`Share URL:\n${tunnel.publicUrl}\n\n${qr}`);
+    return;
+  }
+  output(options.json ? tunnel : urlOnly ? tunnel.publicUrl || tunnel : tunnel, options.json);
+}
+
+async function existingTunnelQr(idOrName: string, json?: boolean) {
+  const tunnels = await listTunnels();
+  const matches = tunnels.filter((item) => item.id === idOrName || item.id.startsWith(idOrName) || item.name === idOrName || item.tunnelName === idOrName);
+  if (matches.length > 1) throw new Error(`Tunnel reference is ambiguous: ${idOrName}`);
+  const tunnel = matches[0];
+  if (!tunnel) throw new Error(`Tunnel not found: ${idOrName}`);
+  if (!tunnel.publicUrl) throw new Error(`Tunnel ${idOrName} is not started yet`);
+  await shareQrOutput(tunnel.publicUrl, json);
+}
+
 async function pairingOutput(state: RemoteAccessState, json?: boolean) {
   if (!state.pairingUrl) throw new Error("Ants Nest did not return a pairing URL");
-  const qr = await QRCode.toString(state.pairingUrl, { type: "terminal", small: true, errorCorrectionLevel: "M" });
+  const qr = await terminalQr(state.pairingUrl);
   if (json) return output({ publicUrl: state.publicUrl, pairingUrl: state.pairingUrl, qr, devices: state.devices }, true);
   console.log(`Pairing URL:\n${state.pairingUrl}\n\n${qr}\nSingle-use: this link expires after the first successful device pairing.`);
 }
@@ -131,6 +162,7 @@ program.command("share")
   .option("--expires-at <date-time>", "stop at an exact ISO or local date-time")
   .option("--path <path>", "share this file or folder using Ants Nest's built-in server")
   .option("--no-token", "make a file/folder share public without token verification")
+  .option("--qr", "print a terminal QR code for the share link")
   .option("--json", "machine-readable output")
   .action((originOrPath, options) => wrap(async () => {
     if (options.expires && options.expiresAt) throw new Error("Use either --expires or --expires-at, not both");
@@ -141,7 +173,7 @@ program.command("share")
     const tunnel = explicitPath || positionalPath
       ? await createFileQuick({ name: options.name, description: options.description, path: explicitPath || positionalPath!, tokenRequired: options.token, ...expiration })
       : await createQuick({ name: options.name, description: options.description, origin: originOrPath, ...expiration });
-    output(options.json ? tunnel : tunnel.publicUrl || tunnel, options.json);
+    await tunnelOutput(tunnel, options, true);
   }));
 program.command("create")
   .description("Create a persistent link for a local service, file, or folder (expiration optional)")
@@ -152,6 +184,7 @@ program.command("create")
   .option("--no-token", "make a file/folder share public without token verification")
   .option("-e, --expires <duration>", "release the hostname after 15m, 1h, 4h, or 1d")
   .option("--expires-at <date-time>", "release the hostname at an exact ISO or local date-time")
+  .option("--qr", "print a terminal QR code for the share link")
   .option("--json")
   .action((name, options) => wrap(async () => {
     if (options.expires && options.expiresAt) throw new Error("Use either --expires or --expires-at, not both");
@@ -160,7 +193,7 @@ program.command("create")
     const tunnel = options.path
       ? await createFileNamed({ name, description: options.description, path: path.resolve(options.path), tokenRequired: options.token, ...expiration })
       : await createNamed({ name, description: options.description, origin: options.url, ...expiration });
-    output(tunnel, options.json);
+    await tunnelOutput(tunnel, options);
   }));
 program.command("list").alias("ls").description("List tunnel profiles and live status").option("--json").action((options) => wrap(async () => {
   const tunnels = await listTunnels();
@@ -168,7 +201,12 @@ program.command("list").alias("ls").description("List tunnel profiles and live s
   if (!tunnels.length) return output("No tunnels yet. Try: ants share 3000");
   output(formatTunnelList(tunnels));
 }));
-program.command("start").argument("<id-or-name>").option("--json").action((id, options) => wrap(async () => output(await startTunnel(id), options.json)));
+program.command("start").argument("<id-or-name>").option("--qr", "print a terminal QR code for the share link").option("--json").action((id, options) => wrap(async () => {
+  await tunnelOutput(await startTunnel(id), options);
+}));
+program.command("qr").description("Show a terminal QR code for a started share link").argument("<id-or-name>").option("--json").action((id, options) => wrap(async () => {
+  await existingTunnelQr(id, options.json);
+}));
 program.command("stop").argument("<id-or-name>").description("Stop a Quick Share or permanently release a Named Tunnel").option("--json").action((id, options) => wrap(async () => output(await stopTunnel(id), options.json)));
 program.command("remove").alias("rm").argument("<id-or-name>").description("Remove a Quick Share or permanently release a Named Tunnel and its hostname").action((id) => wrap(async () => { await removeTunnel(id); output(`Removed ${id}`); }));
 program.command("logs").argument("<id-or-name>").action((id) => wrap(async () => output(await tunnelLogs(id))));

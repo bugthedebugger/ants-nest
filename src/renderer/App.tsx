@@ -7,7 +7,7 @@ import { formatRemaining } from "../shared/duration";
 import { hostnameFromSubdomain } from "../shared/validation";
 
 type Page = "tunnels" | "remote" | "settings";
-type Modal = "tunnel" | "logs" | null;
+type Modal = "tunnel" | "logs" | "qr" | null;
 type ThemePreference = "system" | "light" | "dark";
 
 function message(error: unknown) {
@@ -95,6 +95,7 @@ export function App() {
   const [cliInstallation, setCliInstallation] = useState<CliInstallationStatus>();
   const [appVersion, setAppVersion] = useState("");
   const [qrCode, setQrCode] = useState<string>();
+  const [shareQrCode, setShareQrCode] = useState<string>();
   const [page, setPage] = useState<Page>("tunnels");
   const [modal, setModal] = useState<Modal>(null);
   const [selected, setSelected] = useState<TunnelView>();
@@ -143,6 +144,14 @@ export function App() {
 
   async function showLogs(tunnel: TunnelView) {
     setSelected(tunnel); setLogs(await window.antsNest.logs(tunnel.id)); setModal("logs");
+  }
+
+  async function showShareQr(tunnel: TunnelView) {
+    if (!tunnel.publicUrl) return;
+    setSelected(tunnel);
+    setShareQrCode(undefined);
+    setModal("qr");
+    setShareQrCode(await QRCode.toDataURL(tunnel.publicUrl, { width: 520, margin: 2, color: { dark: "#111111", light: "#f1efe9" } }));
   }
 
   async function startRemote() {
@@ -217,6 +226,7 @@ export function App() {
           {tunnels.map((tunnel) => <TunnelRow key={tunnel.id} tunnel={tunnel} busy={busy === tunnel.id}
             onToggle={() => void action(tunnel.id, () => tunnel.status === "online" ? window.antsNest.stop(tunnel.id) : window.antsNest.start(tunnel.id))}
             onLogs={() => void showLogs(tunnel).catch((e) => setError(message(e)))}
+            onQr={() => void showShareQr(tunnel).catch((e) => setError(message(e)))}
             onRemove={() => void action(tunnel.id, () => window.antsNest.remove(tunnel.id))} />)}
           </div>}
         </section>
@@ -236,6 +246,7 @@ export function App() {
 
       {modal === "tunnel" && <TunnelModal installed={doctor?.installed ?? false} proxyDomain={doctor?.proxyDomain} onClose={() => setModal(null)} onComplete={async (task) => { if (await action("create", task)) setModal(null); }} busy={busy === "create"} />}
       {modal === "logs" && selected && <LogsModal tunnel={selected} logs={logs} onClose={() => setModal(null)} />}
+      {modal === "qr" && selected?.publicUrl && <ShareQrModal tunnel={selected} qrCode={shareQrCode} onClose={() => setModal(null)} />}
     </div>
   </div>;
 }
@@ -287,12 +298,12 @@ function Empty() {
   return <div className="empty"><h3>No tunnels yet</h3><p>Create one with the button above or ask an agent to run the Ants Nest CLI.</p></div>;
 }
 
-function TunnelRow({ tunnel, busy, onToggle, onLogs, onRemove }: { tunnel: TunnelView; busy: boolean; onToggle(): void; onLogs(): void; onRemove(): void }) {
+function TunnelRow({ tunnel, busy, onToggle, onLogs, onQr, onRemove }: { tunnel: TunnelView; busy: boolean; onToggle(): void; onLogs(): void; onQr(): void; onRemove(): void }) {
   const online = tunnel.status === "online";
   return <article className="tunnel-row">
     <div className="tunnel-content">
       <div className="tunnel-heading"><h3>{tunnel.name}</h3><span className={`pill ${tunnel.status}`}><i />{tunnel.status}</span><span className="kind-label">{tunnel.kind}</span></div>
-      <div className="url">{tunnel.publicUrl ? <><button onClick={() => void window.antsNest.openExternal(tunnel.publicUrl!)}>{tunnel.publicUrl.replace("https://", "")}<ArrowUpRight size={13}/></button><CopyButton value={tunnel.publicUrl}/></> : <span>Link appears when started</span>}</div>
+      <div className="url">{tunnel.publicUrl ? <><button onClick={() => void window.antsNest.openExternal(tunnel.publicUrl!)}>{tunnel.publicUrl.replace("https://", "")}<ArrowUpRight size={13}/></button><CopyButton value={tunnel.publicUrl}/><button className="icon-button" title="Show QR" onClick={onQr}><QrCode size={15}/></button></> : <span>Link appears when started</span>}</div>
       <p title={tunnel.description}>{tunnel.description || "No description"}</p>
       <div className="tunnel-meta"><span>{tunnel.sharedPath || tunnel.origin}</span>{tunnel.sharedPath && <><i/><span className="access-meta"><LockKeyhole size={10}/>{tunnel.tokenRequired === false ? "Public" : "Token protected"}</span></>}<i/><span>{tunnel.expiresAt ? `Expires ${formatRemaining(tunnel.expiresAt)}` : `Started ${relativeTime(tunnel.startedAt)}`}</span></div>
     </div>
@@ -339,4 +350,15 @@ function TunnelModal({ installed, proxyDomain, busy, onClose, onComplete }: { in
 
 function LogsModal({ tunnel, logs, onClose }: { tunnel: TunnelView; logs: string; onClose(): void }) {
   return <div className="backdrop"><div className="modal logs-modal"><div className="modal-head"><div><h2>{tunnel.name} logs</h2><p>Latest cloudflared output</p></div><button className="icon-button close" onClick={onClose}><X size={18}/></button></div><pre>{logs}</pre><div className="modal-actions"><button className="secondary" onClick={onClose}>Close</button></div></div></div>;
+}
+
+function ShareQrModal({ tunnel, qrCode, onClose }: { tunnel: TunnelView; qrCode?: string | undefined; onClose(): void }) {
+  return <div className="backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><div className="modal share-qr-modal">
+    <div className="modal-head"><div><h2>{tunnel.name} QR</h2><p>Scan to open this share link.</p></div><button className="icon-button close" onClick={onClose}><X size={18}/></button></div>
+    <div className="share-qr-body">
+      <div className="qr-wrap share-qr-wrap">{qrCode ? <img src={qrCode} alt={`${tunnel.name} share QR code`} /> : <RefreshCw className="spin" />}</div>
+      <div className="pairing-url"><span>{tunnel.publicUrl}</span><CopyButton value={tunnel.publicUrl!}/></div>
+    </div>
+    <div className="modal-actions"><button className="secondary" onClick={() => void window.antsNest.openExternal(tunnel.publicUrl!)}>Open link <ArrowUpRight size={14}/></button><button className="primary" onClick={onClose}>Done</button></div>
+  </div></div>;
 }
