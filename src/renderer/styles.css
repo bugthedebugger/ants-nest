@@ -402,3 +402,7 @@ button.secondary:hover { color: #fff; border-color: #565656; }
   .tunnel-content > p { max-width: 500px; }
   .remote-page-grid { grid-template-columns: 1fr; gap: 40px; }
 }
+
+.security-warning { gap: 20px; padding: 12px 16px; }
+.security-warning p { margin: 6px 0 0; }
+.security-warning button { flex-shrink: 0; }

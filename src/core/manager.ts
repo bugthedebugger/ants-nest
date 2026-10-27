@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
-import { doctor, installCloudflared, isRunning, spawnTunnel, stopProcess, waitUntilReady } from "./cloudflared";
+import { doctor as binaryDoctor, ensureSafeCloudflared, installCloudflared, isRunning, spawnTunnel, stopProcess, waitUntilReady } from "./cloudflared";
 import { putProfile, readState, updateState, type State } from "./store";
 import { desktopFileNamedInputSchema, desktopFileQuickInputSchema, desktopNamedInputSchema, desktopQuickInputSchema, fileNamedInputSchema, fileQuickInputSchema, namedInputSchema, quickInputSchema, type DesktopFileNamedInput, type DesktopFileQuickInput, type DesktopNamedInput, type DesktopQuickInput, type FileNamedInput, type FileQuickInput, type NamedInput, type QuickInput, type TunnelProfile, type TunnelSession, type TunnelView } from "../shared/types";
 import { normalizeOrigin, slug, validateHostname } from "../shared/validation";
@@ -12,10 +12,11 @@ import { createManagedTunnel, deleteManagedTunnel, saveCloudflareConfig } from "
 import type { CloudflareSetupInput } from "../shared/types";
 import { parseExpirationTime } from "../shared/duration";
 import { paths } from "./paths";
+import { isCloudflaredVersionSafe } from "./cloudflared-version";
 
 function view(profile: TunnelProfile, session?: TunnelSession): TunnelView {
   const { tokenFile: _tokenFile, shareConfigFile: _shareConfigFile, ...safeProfile } = profile;
-  return { ...safeProfile, profileId: profile.id, status: "stopped", ...session };
+  return { ...safeProfile, profileId: profile.id, status: "stopped", ...session, connectorUpgradeRequired: Boolean(session && (session.status === "online" || session.status === "starting") && !isCloudflaredVersionSafe(session.connectorVersion || "")) };
 }
 
 export function isRemoteTunnel(tunnel: Pick<TunnelProfile, "tunnelName">) {
@@ -308,7 +309,7 @@ async function createNamedWithHostname(parsed: NamedInput, requestedHostname?: s
   return startTunnel(profile.id);
 }
 
-export async function startTunnel(idOrName: string): Promise<TunnelView> {
+export async function startTunnel(idOrName: string, preservedExpiresAt?: string): Promise<TunnelView> {
   await refreshState();
   const state = await readState();
   const { profile, session } = locate(state, idOrName);
@@ -330,7 +331,7 @@ export async function startTunnel(idOrName: string): Promise<TunnelView> {
   });
   let starting: TunnelSession;
   try {
-    starting = { profileId: profile.id, status: "starting", pid: processInfo.pid, logPath: processInfo.logPath, startedAt: new Date().toISOString(), ...(fileServerPid ? { fileServerPid } : {}) };
+    starting = { profileId: profile.id, status: "starting", pid: processInfo.pid, logPath: processInfo.logPath, connectorVersion: processInfo.version, startedAt: new Date().toISOString(), ...(fileServerPid ? { fileServerPid } : {}) };
     if (profile.expiresInSeconds) starting.expiresAt = new Date(Date.now() + profile.expiresInSeconds * 1000).toISOString();
     if (profile.fixedExpiresAt) starting.expiresAt = parseExpirationTime(profile.fixedExpiresAt);
     if (profile.hostname) {
@@ -342,6 +343,7 @@ export async function startTunnel(idOrName: string): Promise<TunnelView> {
         starting.publicUrl = `${baseUrl}/#token=${encodeURIComponent(config.token)}`;
       } else starting.publicUrl = baseUrl;
     }
+    if (preservedExpiresAt) starting.expiresAt = preservedExpiresAt;
     await updateState((current) => {
       current.sessions = current.sessions.filter((item) => item.profileId !== profile.id);
       current.sessions.push(starting);
@@ -531,4 +533,31 @@ export async function configureCloudflare(input: CloudflareSetupInput) {
   return doctor();
 }
 
-export { doctor };
+export async function doctor() {
+  const status = await binaryDoctor();
+  status.connectorRestartRequired = (await listTunnels()).some((tunnel) => tunnel.connectorUpgradeRequired);
+  return status;
+}
+
+let securityUpdate: Promise<Awaited<ReturnType<typeof doctor>>> | undefined;
+
+export function updateCloudflared() {
+  if (securityUpdate) return securityUpdate;
+  securityUpdate = (async () => {
+    // Download and verify before interrupting any working connector.
+    await installCloudflared();
+    await ensureSafeCloudflared();
+    const tunnels = await listTunnels();
+    for (const tunnel of tunnels.filter((item) => item.connectorUpgradeRequired)) {
+      await pauseTunnel(tunnel.id);
+      // Preserve the original deadline, URL, connector token and Cloudflare resources.
+      if (tunnel.expiresAt && new Date(tunnel.expiresAt).getTime() <= Date.now()) {
+        await stopTunnel(tunnel.id);
+        continue;
+      }
+      await startTunnel(tunnel.id, tunnel.expiresAt);
+    }
+    return doctor();
+  })().finally(() => { securityUpdate = undefined; });
+  return securityUpdate;
+}

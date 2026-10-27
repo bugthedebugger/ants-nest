@@ -211,6 +211,8 @@ export function App() {
       </aside>
 
       <main>
+        {(doctor?.upgradeRequired || doctor?.connectorRestartRequired) && <div className="warning security-warning" role="alert"><div><strong>Cloudflare security update required</strong><p>Update the connector and restart affected tunnels. Existing connections may need to reconnect; share URLs and expiration times stay the same.</p>{busy === "security-update" && <p>Updating and reconnecting…</p>}</div><button className="primary" disabled={Boolean(busy)} onClick={() => void action("security-update", () => window.antsNest.updateCloudflared())}>Update and restart</button></div>}
+        {error && page !== "tunnels" && <div className="error" role="alert"><span>{error}</span><button onClick={() => setError(undefined)}><X size={15}/></button></div>}
         {page === "tunnels" && <>
         <header><div><h1>Tunnels</h1><p>Publish local services and revoke access from one place.</p></div>
           <div className="header-actions"><button className="icon-button refresh" title="Refresh" onClick={() => void refresh()}><RefreshCw size={16} /></button><button className="primary" onClick={() => setModal("tunnel")}><Plus size={16} /> New tunnel</button></div>

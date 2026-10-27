@@ -69,6 +69,12 @@ From any packaged desktop build, open **Settings → Agent CLI → Install CLI**
 
 You do not need to install `cloudflared` manually. Setup downloads the current official binary into Ants Nest's private data directory and verifies its published SHA-256 digest.
 
+The October 2026 [eMudhra security advisory](https://blog.cloudflare.com/emudhra-certificate-compromise/) requires cloudflared 2026.10.2 or later (2026.10.3 on macOS). Before starting a connector, Ants Nest checks the executable version and upgrades outdated managed binaries with SHA-256 verification. If the upgrade fails, the connector does not start. `ants doctor --json` reports `upgradeRequired` and `minimumVersion`. Custom `CLOUDFLARED_BIN` executables must be updated with their original installer; Ants Nest refuses unsafe or unrecognized versions.
+
+The desktop app shows a security warning for outdated binaries and running connectors with outdated or unrecorded versions. Choose **Update and restart**, or run `ants update-cloudflared`, to download the latest verified binary and restart affected connectors while preserving share URLs and expiration times. The replacement is verified before any connector is interrupted.
+
+Updating the binary alone does not patch already running connectors. Restart each affected connector after upgrading; use another healthy replica to keep serving new traffic during a restart. Long-lived connections may need to reconnect. Replace any HTTPS origin certificate chaining to the affected eMudhra intermediates before upgrading; keep TLS certificate verification enabled.
+
 ## Develop from the repository
 
 Install dependencies and start the development build:

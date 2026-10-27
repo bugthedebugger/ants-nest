@@ -9,6 +9,7 @@ const api: AntsNestApi = {
   },
   appVersion: () => ipcRenderer.invoke("ants:app-version"),
   doctor: () => ipcRenderer.invoke("ants:doctor"),
+  updateCloudflared: () => ipcRenderer.invoke("ants:update-cloudflared"),
   configureCloudflare: (input) => ipcRenderer.invoke("ants:configure-cloudflare", input),
   list: () => ipcRenderer.invoke("ants:list"),
   quick: (input) => ipcRenderer.invoke("ants:quick", input),
