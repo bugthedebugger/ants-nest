@@ -36,6 +36,7 @@ export const tunnelSessionSchema = z.object({
   expiresAt: z.string().optional(),
   error: z.string().optional(),
   logPath: z.string().optional(),
+  connectorVersion: z.string().optional(),
 });
 
 export type TunnelKind = z.infer<typeof tunnelKindSchema>;
@@ -43,12 +44,15 @@ export type TunnelStatus = z.infer<typeof tunnelStatusSchema>;
 export type TunnelProfile = z.infer<typeof tunnelProfileSchema>;
 export type TunnelSession = z.infer<typeof tunnelSessionSchema>;
 
-export type TunnelView = TunnelProfile & TunnelSession;
+export type TunnelView = TunnelProfile & TunnelSession & { connectorUpgradeRequired?: boolean };
 
 export type DoctorResult = {
   installed: boolean;
   authenticated: boolean;
   version?: string;
+  minimumVersion?: string;
+  upgradeRequired?: boolean;
+  connectorRestartRequired?: boolean;
   binary?: string;
   configDirectory: string;
   proxyDomain?: string;
@@ -148,6 +152,7 @@ export type AntsNestApi = {
   onStateChanged(callback: () => void): () => void;
   appVersion(): Promise<string>;
   doctor(): Promise<DoctorResult>;
+  updateCloudflared(): Promise<DoctorResult>;
   configureCloudflare(input: CloudflareSetupInput): Promise<DoctorResult>;
   list(): Promise<TunnelView[]>;
   quick(input: DesktopQuickInput): Promise<TunnelView>;

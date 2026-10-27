@@ -1,6 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { configureCloudflare, createDesktopFileNamed, createDesktopFileQuick, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { updateCloudflared, configureCloudflare, createDesktopFileNamed, createDesktopFileQuick, createDesktopNamed, createDesktopQuick, doctor, isRemoteTunnel, listTunnels, reconcileExpiryWorkers, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
 import { cloudflareSetupSchema, desktopFileNamedInputSchema, desktopFileQuickInputSchema, desktopNamedInputSchema, desktopQuickInputSchema, type RemoteAccessState, type ResolvedTheme } from "../shared/types";
 import { newRemotePairing, remoteStatus, remoteTunnelId, restoreRemoteAccess, revokeAllRemoteDevices, revokeRemoteDevice, shutdownRemoteAccess, startRemoteAccess, stopRemoteAccess } from "../core/remote";
 import { startStateChangeServer } from "../core/change-events";
@@ -148,6 +148,7 @@ function registerIpc() {
   });
   ipcMain.handle("ants:app-version", () => app.getVersion());
   ipcMain.handle("ants:doctor", () => doctor());
+  ipcMain.handle("ants:update-cloudflared", () => updateCloudflared());
   ipcMain.handle("ants:configure-cloudflare", (_event, input) => configureCloudflare(cloudflareSetupSchema.parse(input)));
   ipcMain.handle("ants:list", async () => {
     const tunnels = await listTunnels();

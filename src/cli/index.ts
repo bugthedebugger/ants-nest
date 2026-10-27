@@ -7,7 +7,7 @@ import packageMetadata from "../../package.json";
 import { requestAppControl } from "../core/app-control";
 import { checkCliUpdate, runCliUpdate } from "../core/cli-update";
 import { createUpdateProgressReporter } from "./update-progress";
-import { configureCloudflare, createFileNamed, createFileQuick, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
+import { updateCloudflared, configureCloudflare, createFileNamed, createFileQuick, createNamed, createQuick, doctor, listTunnels, removeTunnel, startTunnel, stopTunnel, tunnelLogs } from "../core/manager";
 import { parseDuration, parseExpirationTime } from "../shared/duration";
 import type { CloudflareSetupInput, RemoteAccessState } from "../shared/types";
 import { formatTunnelList } from "./format";
@@ -210,6 +210,8 @@ program.command("qr").description("Show a terminal QR code for a started share l
 program.command("stop").argument("<id-or-name>").description("Stop a Quick Share or permanently release a Named Tunnel").option("--json").action((id, options) => wrap(async () => output(await stopTunnel(id), options.json)));
 program.command("remove").alias("rm").argument("<id-or-name>").description("Remove a Quick Share or permanently release a Named Tunnel and its hostname").action((id) => wrap(async () => { await removeTunnel(id); output(`Removed ${id}`); }));
 program.command("logs").argument("<id-or-name>").action((id) => wrap(async () => output(await tunnelLogs(id))));
+
+program.command("update-cloudflared").description("Apply the cloudflared security update and restart affected connectors (connections may reconnect)").option("--json").action((options) => wrap(async () => output(await updateCloudflared(), options.json)));
 
 program.command("update")
   .description("Update the ants CLI to the latest GitHub release")

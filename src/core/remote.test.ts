@@ -19,7 +19,7 @@ beforeEach(async () => {
   const binary = path.join(directory, "fake-cloudflared");
   await fs.writeFile(binary, `#!/usr/bin/env node
 const args = process.argv.slice(2);
-if (args.includes('--version')) { console.log('cloudflared version test'); process.exit(0); }
+if (args.includes('--version')) { console.log('cloudflared version 2026.10.3'); process.exit(0); }
 console.error('INF Registered tunnel connection');
 setInterval(() => {}, 1000);
 `, { mode: 0o700 });

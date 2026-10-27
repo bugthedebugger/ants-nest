@@ -2,11 +2,39 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDesktopNamed, createDesktopQuick, createFileQuick, createNamed, createQuick, expireTunnel, listTunnels, stopTunnel } from "./manager";
+import { createDesktopNamed, createDesktopQuick, createFileQuick, createNamed, createQuick, doctor, expireTunnel, listTunnels, stopTunnel, updateCloudflared } from "./manager";
+import { readState, updateState } from "./store";
 import { isRunning } from "./cloudflared";
 
 let directory = "";
 let dnsCreated = false;
+
+it("updates legacy connectors without deleting shares or extending expiration", async () => {
+  const tunnel = await createQuick({ name: "security", description: "Security upgrade regression", origin: "http://localhost:3000", expiresInSeconds: 600 });
+  await updateState((state) => { delete state.sessions[0]!.connectorVersion; });
+  expect((await doctor()).connectorRestartRequired).toBe(true);
+  const requests = vi.mocked(fetch).mock.calls.length;
+  await updateCloudflared();
+  const restarted = (await listTunnels())[0]!;
+  expect(restarted.status).toBe("online");
+  expect(restarted.pid).not.toBe(tunnel.pid);
+  expect(isRunning(tunnel.pid)).toBe(false);
+  expect(restarted.publicUrl).toBe(tunnel.publicUrl);
+  expect(restarted.expiresAt).toBe(tunnel.expiresAt);
+  expect(restarted.connectorUpgradeRequired).toBe(false);
+  expect((await readState()).profiles[0]!.tunnelId).toBe(tunnel.tunnelId);
+  expect(vi.mocked(fetch).mock.calls).toHaveLength(requests);
+  expect((await doctor()).connectorRestartRequired).toBe(false);
+});
+
+it("leaves a running connector online when the replacement binary fails validation", async () => {
+  const tunnel = await createQuick({ name: "security-failure", description: "Security upgrade regression", origin: "http://localhost:3000", expiresInSeconds: 600 });
+  await updateState((state) => { delete state.sessions[0]!.connectorVersion; });
+  await fs.writeFile(process.env.CLOUDFLARED_BIN!, "#!/usr/bin/env node\nconsole.log('cloudflared version 2026.8.2');\n", { mode: 0o700 });
+  await expect(updateCloudflared()).rejects.toThrow("security update");
+  expect(isRunning(tunnel.pid)).toBe(true);
+  expect((await listTunnels())[0]!.pid).toBe(tunnel.pid);
+});
 
 function success(result: unknown) {
   return new Response(JSON.stringify({ success: true, errors: [], result }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -17,7 +45,7 @@ beforeEach(async () => {
   const binary = path.join(directory, "fake-cloudflared");
   await fs.writeFile(binary, `#!/usr/bin/env node
 const args = process.argv.slice(2);
-if (args.includes('--version')) { console.log('cloudflared version test'); process.exit(0); }
+if (args.includes('--version')) { console.log('cloudflared version 2026.10.3'); process.exit(0); }
 console.error('INF Registered tunnel connection');
 setInterval(() => {}, 1000);
 `, { mode: 0o700 });

@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { cloudflareDirectory, paths } from "./paths";
 import type { DoctorResult } from "../shared/types";
 import { readCloudflareConfig } from "./cloudflare-api";
+import { isCloudflaredVersionSafe, minimumCloudflaredVersion } from "./cloudflared-version";
 
 const executable = process.platform === "win32" ? "cloudflared.exe" : "cloudflared";
 
@@ -57,7 +58,10 @@ let installing: Promise<string> | undefined;
 export function installCloudflared(): Promise<string> {
   if (installing) return installing;
   installing = (async () => {
-    if (process.env.CLOUDFLARED_BIN) return process.env.CLOUDFLARED_BIN;
+    if (process.env.CLOUDFLARED_BIN) {
+      await requireSafeCloudflared();
+      return process.env.CLOUDFLARED_BIN;
+    }
     const destination = paths.cloudflaredBinary();
     await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
     const platformAsset = assetForCurrentPlatform();
@@ -66,6 +70,7 @@ export function installCloudflared(): Promise<string> {
     });
     if (!releaseResponse.ok) throw new Error(`Unable to check the latest cloudflared release: HTTP ${releaseResponse.status}`);
     const release = await releaseResponse.json() as GithubRelease;
+    if (!isCloudflaredVersionSafe(release.tag_name)) throw new Error(`Cloudflare release ${release.tag_name} does not meet the security minimum ${minimumCloudflaredVersion()}`);
     const asset = release.assets.find((candidate) => candidate.name === platformAsset.name);
     if (!asset) throw new Error(`Cloudflare release ${release.tag_name} does not include ${platformAsset.name}`);
     const expectedHash = checksumFromRelease(release, asset);
@@ -148,16 +153,42 @@ export async function doctor(): Promise<DoctorResult> {
     result.installed = true;
     result.version = (stdout || stderr).trim();
     result.binary = cloudflaredBinary();
+    result.minimumVersion = minimumCloudflaredVersion();
+    result.upgradeRequired = !isCloudflaredVersionSafe(result.version);
   } catch {
     return result;
   }
   return result;
 }
 
-export async function spawnTunnel(profileId: string, args: string[]): Promise<{ pid: number; logPath: string }> {
+async function requireSafeCloudflared() {
+  const { stdout, stderr } = await run(["--version"], { timeoutMs: 5000 });
+  if (!isCloudflaredVersionSafe(stdout || stderr)) {
+    const action = process.env.CLOUDFLARED_BIN
+      ? "Update CLOUDFLARED_BIN using its original installer, or unset it to use the Ants Nest managed binary."
+      : "Run Cloudflare Setup to update the managed binary.";
+    throw new Error(`cloudflared requires a security update to ${minimumCloudflaredVersion()} or later. ${action}`);
+  }
+  return (stdout || stderr).trim();
+}
+
+export async function ensureSafeCloudflared() {
+  if (process.env.CLOUDFLARED_BIN) return requireSafeCloudflared();
+  try {
+    return await requireSafeCloudflared();
+  } catch {
+    // Upgrade managed installations before starting a connector. Never fall
+    // back to an old binary when the download or verification fails.
+    await installCloudflared();
+  }
+  return requireSafeCloudflared();
+}
+
+export async function spawnTunnel(profileId: string, args: string[]): Promise<{ pid: number; logPath: string; version: string }> {
   if (!process.env.CLOUDFLARED_BIN && !fsSync.existsSync(paths.cloudflaredBinary())) {
     throw new Error("cloudflared is not installed. Complete Cloudflare Setup first.");
   }
+  const version = await ensureSafeCloudflared();
   await fs.mkdir(paths.logs(), { recursive: true, mode: 0o700 });
   const logPath = path.join(paths.logs(), `${profileId}.log`);
   await fs.writeFile(logPath, "", { mode: 0o600 });
@@ -171,7 +202,7 @@ export async function spawnTunnel(profileId: string, args: string[]): Promise<{ 
   child.unref();
   fsSync.closeSync(output);
   if (!child.pid) throw new Error("cloudflared did not start");
-  return { pid: child.pid, logPath };
+  return { pid: child.pid, logPath, version };
 }
 
 export function isRunning(pid?: number): boolean {
