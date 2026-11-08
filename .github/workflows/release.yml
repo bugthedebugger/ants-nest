@@ -107,7 +107,7 @@ jobs:
               ~/.cache/electron
               ~/.cache/electron-builder
           - platform: mac
-            os: macos-14
+            os: macos-15
             cache-path: |
               ~/Library/Caches/electron
               ~/Library/Caches/electron-builder
