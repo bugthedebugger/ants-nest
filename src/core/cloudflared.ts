@@ -199,8 +199,12 @@ export async function spawnTunnel(profileId: string, args: string[]): Promise<{ 
     windowsHide: true,
     stdio: ["ignore", output, output],
   });
-  child.unref();
   fsSync.closeSync(output);
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", reject);
+  });
+  child.unref();
   if (!child.pid) throw new Error("cloudflared did not start");
   return { pid: child.pid, logPath, version };
 }
@@ -227,14 +231,41 @@ export async function stopProcess(pid?: number) {
   }
 }
 
-export async function waitUntilReady(logPath: string, timeoutMs = 20_000) {
+function startupTimeoutMs() {
+  const configured = process.env.ANTS_NEST_STARTUP_TIMEOUT_MS;
+  if (configured === undefined) return 120_000;
+  const value = Number(configured);
+  if (!Number.isInteger(value) || value < 1 || value > 600_000) {
+    throw new Error("ANTS_NEST_STARTUP_TIMEOUT_MS must be an integer between 1 and 600000.");
+  }
+  return value;
+}
+
+// ERR also covers optional feature discovery and recoverable edge connection
+// attempts. Fail early only for explicit local configuration/authentication
+// errors; other failures are bounded by process liveness and the deadline.
+function fatalStartupLine(content: string) {
+  return content.split("\n").find((line) => [
+    /(?:provided\s+)?(?:tunnel\s+)?token is (?:not valid|invalid)/i,
+    /(?:invalid|malformed) (?:tunnel )?token/i,
+    /(?:cannot|unable to|failed to) (?:read|load|parse|decode).*\b(?:token|credentials|config(?:uration)?)\b/i,
+    /credentials file .*?(?:does not exist|doesn't exist|not found|not a file|invalid|permission denied)/i,
+    /(?:error|failed) parsing (?:YAML|JSON|config(?:uration)?|tunnel credentials)/i,
+    /(?:invalid|malformed) (?:(?:tunnel|ingress) )?(?:config(?:uration)?|credentials)/i,
+    /(?:unauthorized|authentication failed|invalid tunnel secret)/i,
+  ].some((pattern) => pattern.test(line)))?.trim();
+}
+
+export async function waitUntilReady(logPath: string, pid: number, timeoutMs = startupTimeoutMs()) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const content = await fs.readFile(logPath, "utf8").catch(() => "");
+    const fatal = fatalStartupLine(content);
+    if (fatal) throw new Error(fatal);
+    // Check before accepting a registration left behind by a dead connector.
+    if (!isRunning(pid)) throw new Error(`cloudflared exited before becoming ready. Check the tunnel logs at ${logPath} for details.`);
     if (/Registered tunnel connection|Connection .* registered/i.test(content)) return;
-    const fatal = content.split("\n").find((line) => /ERR|failed to|error parsing/i.test(line));
-    if (fatal && /Unable to|failed to|error parsing|credentials file|not found/i.test(fatal)) throw new Error(fatal.trim());
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(150, Math.max(0, deadline - Date.now()))));
   }
-  throw new Error("Timed out waiting for cloudflared to connect. Check the tunnel logs for details.");
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for cloudflared to connect. Check the tunnel logs at ${logPath} for DNS or edge connectivity failures.`);
 }
