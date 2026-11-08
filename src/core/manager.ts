@@ -354,7 +354,7 @@ export async function startTunnel(idOrName: string, preservedExpiresAt?: string)
     throw error;
   }
   try {
-    await waitUntilReady(processInfo.logPath);
+    await waitUntilReady(processInfo.logPath, processInfo.pid);
     const online = await updateState((current) => {
       const target = current.sessions.find((item) => item.profileId === profile.id)!;
       target.status = "online";

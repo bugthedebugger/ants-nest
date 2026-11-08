@@ -80,10 +80,53 @@ afterEach(async () => {
   delete process.env.ANTS_NEST_EXPIRY_WORKER;
   delete process.env.ANTS_NEST_FILE_SHARE_WORKER;
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   await fs.rm(directory, { recursive: true, force: true });
 });
 
 describe("tunnel manager", () => {
+  it("keeps a retrying connector alive until it registers", async () => {
+    await fs.writeFile(process.env.CLOUDFLARED_BIN!, `#!/usr/bin/env node
+if (process.argv.includes('--version')) { console.log('cloudflared version 2026.10.3'); process.exit(0); }
+console.error('ERR Failed to fetch features, default to disable');
+console.error('ERR failed to dial to edge with quic: timeout: no recent network activity');
+setTimeout(() => console.error('INF Registered tunnel connection protocol=http2'), 300);
+setInterval(() => {}, 1000);
+`, { mode: 0o700 });
+    const tunnel = await createNamed({ name: "Retry connector", description: "Startup fallback regression", origin: "4173" });
+    expect(tunnel.status).toBe("online");
+    expect(isRunning(tunnel.pid)).toBe(true);
+  });
+
+  it("stops a retrying connector when the startup deadline expires", async () => {
+    vi.stubEnv("ANTS_NEST_STARTUP_TIMEOUT_MS", "450");
+    const pidPath = path.join(directory, "connector.pid");
+    await fs.writeFile(process.env.CLOUDFLARED_BIN!, `#!/usr/bin/env node
+if (process.argv.includes('--version')) { console.log('cloudflared version 2026.10.3'); process.exit(0); }
+require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+console.error('ERR failed to dial to edge with quic: timeout: no recent network activity');
+setInterval(() => {}, 1000);
+`, { mode: 0o700 });
+    await expect(createNamed({ name: "Deadline connector", description: "Startup deadline regression", origin: "4173" })).rejects.toThrow("Timed out after 450ms");
+    expect(isRunning(Number(await fs.readFile(pidPath, "utf8")))).toBe(false);
+    const session = (await readState()).sessions[0]!;
+    expect(session.status).toBe("failed");
+    expect(session.pid).toBeUndefined();
+  });
+
+  it("marks a connector that exits before registration failed", async () => {
+    await fs.writeFile(process.env.CLOUDFLARED_BIN!, `#!/usr/bin/env node
+if (process.argv.includes('--version')) { console.log('cloudflared version 2026.10.3'); process.exit(0); }
+console.error('ERR Failed to fetch features, default to disable');
+process.exit(1);
+`, { mode: 0o700 });
+    await expect(createQuick({ name: "Exited connector", description: "Startup exit regression", origin: "4173", expiresInSeconds: 300 })).rejects.toThrow("exited before becoming ready");
+    const session = (await readState()).sessions[0]!;
+    expect(session.status).toBe("failed");
+    expect(session.pid).toBeUndefined();
+    expect(session.expiryPid).toBeUndefined();
+  });
+
   it("starts, discovers, persists, and stops a quick tunnel", async () => {
     const started = await createQuick({ name: "Agent preview", description: "Preview the agent workspace", origin: "4173", expiresInSeconds: 300 });
     expect(started.status).toBe("online");

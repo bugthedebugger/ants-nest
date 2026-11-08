@@ -310,6 +310,8 @@ On Linux, enabled Remote access also creates the managed autostart entry `~/.con
 
 Override the directory with `ANTS_NEST_HOME` or the executable with `CLOUDFLARED_BIN`. The four `CLOUDFLARE_*` environment variables take precedence over saved setup values.
 
+Connector startup waits up to 120 seconds for registration so slow DNS initialization and Cloudflare's transport retries/fallback can complete. Optional feature lookup failures and transient edge connection errors remain in the tunnel logs without aborting startup. Invalid credentials/configuration and connector exits still fail startup. Set `ANTS_NEST_STARTUP_TIMEOUT_MS` to an integer from `1` to `600000` to override the startup deadline (milliseconds) for the CLI or desktop process. A deadline failure points to the tunnel log; persistent DNS or blocked edge connectivity still needs to be resolved in the host network.
+
 SQLite transactions coordinate concurrent Electron and CLI writes. User-only local sockets signal committed tunnel changes to Electron and let the CLI safely request Remote access operations from the running app, so both interfaces stay on the same runtime and revocation state.
 
 ## Security model
